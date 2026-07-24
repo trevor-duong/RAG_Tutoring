@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+
+# Secrets
+.env
+.env.local
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Source tutoring materials and derived artifacts stay local.
+# Directories and .gitkeep files are re-included so the skeleton commits.
+data/**
+!data/**/
+!**/.gitkeep
+
+# Local vector store
+chroma/
+*.sqlite3
+
+# Tooling caches
+.ruff_cache/
+.pytest_cache/
+
+# Personal interview-prep notes, not part of the codebase
+docs/interview-prep/
+
+# macOS
+.DS_Store
