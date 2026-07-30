@@ -25,7 +25,15 @@ def project_root() -> Path:
 
 ROOT = project_root()
 DATA_RAW = ROOT / "data" / "raw"
+DATA_PROCESSED = ROOT / "data" / "processed"
 CHROMA_DIR = ROOT / "chroma"
+
+# Extracted page text, written by scripts/build_index.py during the indexing
+# pass. PDF extraction is by far the slowest step (one 709 MB illustrated
+# textbook takes ~10 minutes on its own), so the text is kept so that auditing
+# the corpus and locating eval ground truth do not each pay for it again.
+# Gitignored with the rest of data/ -- the source materials stay local.
+PAGES_CACHE = DATA_PROCESSED / "pages.jsonl"
 
 # Embedding model. Changing this is a full re-index, not an incremental
 # migration -- embeddings from two models are not comparable. See

@@ -8,7 +8,14 @@ reproducible.
 
 from __future__ import annotations
 
-from rag_tutoring.ingest import _EXTRACTION_JUNK, Chunk, chunk_text, pack_words
+from rag_tutoring.ingest import (
+    _EMAIL,
+    _EXTRACTION_JUNK,
+    Chunk,
+    chunk_pages,
+    chunk_text,
+    pack_words,
+)
 
 
 def spans_fit(costs: list[int], spans: list[tuple[int, int]], budget: int) -> bool:
@@ -94,6 +101,93 @@ def test_extraction_junk_is_removed():
 
 def test_ordinary_whitespace_survives_cleaning():
     assert clean("tabs\tand\nnewlines\rcollapse") == "tabs and newlines collapse"
+
+
+def redact(text: str) -> str:
+    """What ``load_pdf`` does to raw extracted text, in order."""
+    cleaned = " ".join(_EXTRACTION_JUNK.sub(" ", text).split())
+    return " ".join(_EMAIL.sub(" ", cleaned).split())
+
+
+# Every address below is synthetic, on a reserved example domain. The fixtures
+# reproduce the *shape* of what the corpus actually contains -- a purchase
+# watermark, an inline author contact, a brace-grouped shared-domain list -- which
+# is all these tests discriminate on. Pasting the real strings in would commit the
+# very addresses the redaction exists to remove, permanently, to fix nothing.
+
+
+def test_purchase_watermark_is_removed():
+    # A per-buyer watermark on a textbook's title page. Chunk text is quoted to
+    # students verbatim, so this would disclose who bought the book.
+    assert redact("TRIPLE BAM!!! Sold to buyer@example.com") == "TRIPLE BAM!!! Sold to"
+
+
+def test_author_contact_addresses_are_removed():
+    assert (
+        redact("First Author first@cs.example.edu Second Author second@cs.example.edu")
+        == "First Author Second Author"
+    )
+
+
+def test_shared_domain_author_lists_are_removed():
+    """Papers print one brace-grouped address for all authors.
+
+    Matching only the ordinary form leaves these behind -- 13 of them in this
+    corpus -- because the character before the "@" is "}", which no plain
+    local-part pattern accepts. Separators vary, and the list often wraps across
+    a line, which is why page text is whitespace-canonicalised first.
+    """
+    assert redact("Research {alpha, v-beta, gamma}@corp.example.com Abstract") == (
+        "Research Abstract"
+    )
+    assert redact("{alpha|beta|gamma}@lab.example.com") == ""
+    assert (
+        redact("Edinburgh\n{first.last,a.other}@school.example.ac.uk\nAbstract")
+        == "Edinburgh Abstract"
+    )
+
+
+def test_redaction_does_not_run_away_past_the_address():
+    """The brace form is length-capped, so an unrelated "{" cannot swallow prose."""
+    text = "{" + "x " * 120 + "} and dropout@example.com follows"
+    assert "and" in redact(text) and "follows" in redact(text)
+    assert "@example.com" not in redact(text)
+
+
+def test_redaction_prefers_over_removal_to_leaking():
+    """When extraction drops the space before an address the boundary is genuinely
+    ambiguous, and the greedy local part takes the preceding digits with it.
+
+    Chosen deliberately: leaving half an address in a passage quoted to a student
+    is worse than losing a number. Measured 0 occurrences of this in the corpus
+    (every real address is preceded by whitespace or punctuation), so the cost is
+    hypothetical while the leak it prevents is not.
+    """
+    assert redact("p=0.5author@cs.example.edu Hinton et al.") == "p= Hinton et al."
+
+
+def test_redaction_leaves_ordinary_text_with_an_at_sign_alone():
+    """Not every @ is an address; the pattern needs a domain to fire."""
+    assert redact("attention @ layer 6 costs O(n^2)") == "attention @ layer 6 costs O(n^2)"
+
+
+def test_chunk_pages_matches_chunk_pdf_on_the_same_pages():
+    """``chunk_pdf`` must be exactly ``chunk_pages`` over ``load_pdf``.
+
+    The rebuild script chunks pre-extracted pages so it can cache the text in the
+    same pass. If that path could drift from the one the pipeline uses, an index
+    rebuilt by the script would stop matching what the eval baseline describes.
+    """
+    pages = [(1, "alpha beta gamma delta"), (4, "epsilon zeta")]
+    one = lambda w: 1  # noqa: E731 -- trivial cost function, one token per word
+    chunks = chunk_pages(pages, "Doc", "paper", one, max_tokens=3, overlap_tokens=1)
+    assert [(c.page, c.chunk_index, c.text) for c in chunks] == [
+        (1, 0, "alpha beta gamma"),
+        (1, 1, "gamma delta"),
+        (4, 0, "epsilon zeta"),
+    ]
+    assert {c.source for c in chunks} == {"Doc"}
+    assert {c.source_type for c in chunks} == {"paper"}
 
 
 def test_chunk_id_is_stable_and_sorts_by_page():

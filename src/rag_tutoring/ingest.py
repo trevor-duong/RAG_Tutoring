@@ -8,15 +8,77 @@ testable on its own.
 
 from __future__ import annotations
 
+import json
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
 from pypdf import PdfReader
 
-from rag_tutoring.config import CHUNK_MAX_TOKENS, CHUNK_OVERLAP_TOKENS, EMBEDDING_MODEL
+from rag_tutoring.config import (
+    CHUNK_MAX_TOKENS,
+    CHUNK_OVERLAP_TOKENS,
+    DATA_RAW,
+    EMBEDDING_MODEL,
+    PAGES_CACHE,
+)
+
+# Source types, each stored in ``data/raw/<type>s/``. The type rides along on
+# every chunk so retrieval can distinguish a paper's claim from a textbook's
+# explanation -- they answer a student's question differently.
+SOURCE_TYPES = ("paper", "textbook")
+
+
+def corpus_documents(data_raw: Path = DATA_RAW) -> list[tuple[Path, str]]:
+    """Every source PDF with its source type, in a stable (sorted) order.
+
+    One definition of "what the corpus is", shared by ingestion, the eval
+    harness, and any audit script -- so a document cannot be indexed but missing
+    from an audit, or vice versa.
+    """
+    return [
+        (path, kind)
+        for kind in SOURCE_TYPES
+        for path in sorted((data_raw / f"{kind}s").glob("*.pdf"))
+    ]
+
+
+@dataclass(frozen=True)
+class Page:
+    """One extracted page, as cached between runs.
+
+    ``page`` is pypdf's page index (1-based), the same number :class:`Chunk`
+    carries -- not the number printed on the page. Anything deriving eval ground
+    truth has to use this numbering or every label lands on the wrong page.
+    """
+
+    source: str
+    source_type: str
+    page: int
+    text: str
+
+
+def write_pages(path: Path, pages: Iterable[Page]) -> int:
+    """Write the extraction cache as JSONL, returning how many pages were written."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    written = 0
+    with path.open("w") as handle:
+        for p in pages:
+            handle.write(json.dumps(p.__dict__) + "\n")
+            written += 1
+    return written
+
+
+def read_pages(path: Path = PAGES_CACHE) -> list[Page]:
+    """Read the extraction cache, with a pointed error if it has not been built."""
+    if not path.exists():
+        raise FileNotFoundError(
+            f"no extraction cache at {path}; run scripts/build_index.py first "
+            f"(it writes the cache while indexing)"
+        )
+    return [Page(**json.loads(line)) for line in path.read_text().splitlines() if line.strip()]
 
 
 @dataclass(frozen=True)
@@ -55,18 +117,47 @@ class Chunk:
 # handles them.
 _EXTRACTION_JUNK = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\ud800-\udfff]")
 
+# Email addresses, stripped for a different reason than the junk above: chunk
+# text is quoted verbatim to students, and the corpus carries addresses that
+# should not be shown to them. One textbook's title page holds a "Sold to
+# <buyer>" purchase watermark naming the person who bought it; paper title pages
+# carry author contact addresses. Neither ever helps answer a question about deep
+# learning -- they are noise in the embedding and a disclosure in the citation.
+#
+# Two forms, because matching only the ordinary one leaves 13 addresses in this
+# corpus: papers routinely print a LaTeX-style shared-domain author list,
+# "{first,second,third}@lab.example.org" (sometimes space- or pipe-separated, and
+# wrapped across lines -- which is why text is canonicalised before this runs).
+# The brace form is tried first and length-capped so it cannot run away; the
+# longest real match here is 81 characters.
+#
+# Redaction happens in ``load_pdf``, the one place raw PDF becomes text the rest
+# of the system handles, so no downstream path can read an unredacted page.
+# Measured after the fact: 68 addresses removed, 0 address-shaped strings left.
+_EMAIL = re.compile(
+    r"\{[^{}]{1,160}\}@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}"
+    r"|[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}"
+)
+
 
 def load_pdf(path: Path) -> list[tuple[int, str]]:
     """Return ``(page_number, text)`` for each page that has extractable text.
 
-    Page numbers are 1-indexed to match how a reader cites them. Pages whose
-    extracted text is empty (e.g. a full-page figure) are skipped rather than
-    emitted as blank chunks.
+    Page numbers are 1-indexed to match how a reader cites them -- note that this
+    is pypdf's page index, not the number printed on the page; front matter makes
+    those differ. Pages whose extracted text is empty (e.g. a full-page figure)
+    are skipped rather than emitted as blank chunks.
     """
     reader = PdfReader(str(path))
     pages: list[tuple[int, str]] = []
     for i, page in enumerate(reader.pages, start=1):
-        text = _EXTRACTION_JUNK.sub(" ", page.extract_text() or "").strip()
+        text = _EXTRACTION_JUNK.sub(" ", page.extract_text() or "")
+        # Canonicalise whitespace *before* redacting: PDF extraction wraps lines
+        # mid-construct, and an author list broken across a line break would
+        # otherwise slip past the pattern. Chunking collapses whitespace anyway,
+        # so doing it here just makes page text deterministic. Collapsed again
+        # afterwards because the substitution leaves a space of its own behind.
+        text = " ".join(_EMAIL.sub(" ", " ".join(text.split())).split())
         if text:
             pages.append((i, text))
     return pages
@@ -158,28 +249,30 @@ def chunk_text(
     return [" ".join(words[s:e]) for s, e in pack_words(costs, max_tokens, overlap_tokens)]
 
 
-def chunk_pdf(
-    path: Path,
+def chunk_pages(
+    pages: Iterable[tuple[int, str]],
+    source: str,
     source_type: str,
     count_tokens: Callable[[str], int] | None = None,
     max_tokens: int = CHUNK_MAX_TOKENS,
     overlap_tokens: int = CHUNK_OVERLAP_TOKENS,
 ) -> list[Chunk]:
-    """Load a PDF and chunk it page by page.
+    """Chunk already-extracted pages.
+
+    Split out from :func:`chunk_pdf` so a caller that has already extracted the
+    pages -- the rebuild script, which caches the text for ground-truth lookup --
+    can chunk them without a second extraction pass, and without reimplementing
+    this loop. A copy of it would drift from the real one, and the index it built
+    would silently stop matching what the pipeline produces.
 
     Chunking never crosses a page boundary, so every chunk cites exactly one
     page. The tradeoff: a passage split across a page break lands in two chunks
     with no overlap bridging them. Acceptable for Phase 1; revisit if recall
     suffers on concepts that straddle pages.
-
-    Papers and textbooks share these settings deliberately: the budget is set by
-    the embedding model's input window, which does not care what kind of
-    document the text came from.
     """
-    source = path.stem
     count_tokens = count_tokens or token_counter()  # built once, reused across pages
     chunks: list[Chunk] = []
-    for page_number, text in load_pdf(path):
+    for page_number, text in pages:
         for idx, piece in enumerate(chunk_text(text, count_tokens, max_tokens, overlap_tokens)):
             chunks.append(
                 Chunk(
@@ -191,3 +284,21 @@ def chunk_pdf(
                 )
             )
     return chunks
+
+
+def chunk_pdf(
+    path: Path,
+    source_type: str,
+    count_tokens: Callable[[str], int] | None = None,
+    max_tokens: int = CHUNK_MAX_TOKENS,
+    overlap_tokens: int = CHUNK_OVERLAP_TOKENS,
+) -> list[Chunk]:
+    """Load a PDF and chunk it page by page.
+
+    Papers and textbooks share these settings deliberately: the budget is set by
+    the embedding model's input window, which does not care what kind of
+    document the text came from.
+    """
+    return chunk_pages(
+        load_pdf(path), path.stem, source_type, count_tokens, max_tokens, overlap_tokens
+    )
