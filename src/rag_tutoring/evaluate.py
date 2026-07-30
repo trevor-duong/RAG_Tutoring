@@ -307,8 +307,13 @@ def format_report(report: Report) -> str:
         "  by phrasing",
     ]
     out += [_line(f"  {style}", rs) for style, rs in report.by_style().items() if rs]
-    out += ["", "  by source type  (groups under 3 questions are not shown)"]
-    out += [_line(f"  {kind}", rs) for kind, rs in report.by_source_type().items()]
+    # Say how many questions the min_n filter drops, not just that it drops some.
+    # Otherwise the column does not sum to n and the reader cannot tell whether
+    # that is a filter or a bug -- the rows look like a partition and are not.
+    by_type = report.by_source_type()
+    hidden = len(report.labeled) - sum(len(rs) for rs in by_type.values())
+    out += ["", f"  by source type  ({hidden} in groups under 3 questions, not shown)"]
+    out += [_line(f"  {kind}", rs) for kind, rs in by_type.items()]
 
     pairs = report.controlled_pairs()
     if pairs:
@@ -344,11 +349,16 @@ def format_report(report: Report) -> str:
         ]
         width = max(len(label) for label, _ in rows)  # computed, not hand-counted
         out += ["", "  ABSTENTION -- questions the corpus cannot answer"]
-        out += [
-            f"    top-1 score, {label:{width}s}  min {min(scores):.3f}  "
-            f"median {median(scores):.3f}  max {max(scores):.3f}"
-            for label, scores in rows
-        ]
+        for label, scores in rows:
+            # A group can be empty: recall@5 = 0 empties the first one. Finding
+            # that out as min([]) blowing up after a 13-minute rebuild, with no
+            # report at all, is the wrong way to learn a change made things worse.
+            stats = (
+                f"min {min(scores):.3f}  median {median(scores):.3f}  max {max(scores):.3f}"
+                if scores
+                else "no questions in this group"
+            )
+            out.append(f"    top-1 score, {label:{width}s}  {stats}")
         out += ["", "    threshold   good answers refused   unanswerable refused"]
         for t, lost, n_ans, refused, n_neg in report.abstention_sweep(
             (0.30, 0.35, 0.40, 0.45, 0.50)

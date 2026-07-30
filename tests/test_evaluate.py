@@ -154,3 +154,47 @@ def test_unknown_style_is_rejected(tmp_path):
     )
     with pytest.raises(ValueError, match="style"):
         load_questions(path)
+
+
+PROVENANCE = {
+    "embedding_model": "m",
+    "chunk_max_tokens": 240,
+    "chunk_overlap_tokens": 60,
+    "collection": "c",
+    "chunks_indexed": 1,
+    "documents_indexed": 1,
+    "documents_on_disk": 1,
+}
+
+
+def test_report_states_how_many_questions_the_source_type_filter_hides():
+    """The by-source-type rows are not a partition and must not read as one.
+
+    Groups under three questions are dropped, so the column sums to less than n
+    -- a reader who cannot tell a filter from a bug has been handed something
+    worse than no number. Here both questions fall in one undersized group, so
+    every row is dropped and the header has to account for all of them.
+    """
+    from rag_tutoring.evaluate import Report, format_report
+
+    def res(qid):
+        return QuestionResult(question(qid, "verbatim-term", (5,)), 1, 0.5, "Doc", 1)
+
+    report = Report(provenance=PROVENANCE, labeled=(res("a"), res("b")), negatives=())
+    line = next(ln for ln in format_report(report).splitlines() if "by source type" in ln)
+    assert "2 in groups under 3" in line, line
+
+
+def test_abstention_block_survives_zero_recall():
+    """A run where nothing is retrieved must still produce a report.
+
+    ``recall@5 = 0`` empties the succeeded group, and ``min([])`` raises -- losing
+    the entire report of a 13-minute rebuild at exactly the moment it is saying
+    a change made things much worse.
+    """
+    from rag_tutoring.evaluate import Report, format_report
+
+    missed = QuestionResult(question("a", "symptom", (5,)), None, 0.4, "Doc", 1)
+    negative = QuestionResult(question("n", "symptom", ()), None, 0.3, "Doc", 1)
+    text = format_report(Report(provenance=PROVENANCE, labeled=(missed,), negatives=(negative,)))
+    assert "no questions in this group" in text
