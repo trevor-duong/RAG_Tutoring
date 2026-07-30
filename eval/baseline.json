@@ -1,0 +1,382 @@
+{
+  "provenance": {
+    "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+    "chunk_max_tokens": 240,
+    "chunk_overlap_tokens": 60,
+    "collection": "tutoring-all-MiniLM-L6-v2",
+    "chunks_indexed": 9169,
+    "documents_indexed": 37,
+    "documents_on_disk": 37,
+    "k": 10
+  },
+  "summary": {
+    "n_labeled": 32,
+    "n_negatives": 5,
+    "mrr": 0.3186,
+    "recall@1": 0.1875,
+    "recall@3": 0.4062,
+    "recall@5": 0.5,
+    "recall@10": 0.6875,
+    "by_style": {
+      "verbatim-term": {
+        "n": 18,
+        "mrr": 0.3904,
+        "recall@1": 0.2222,
+        "recall@3": 0.5,
+        "recall@5": 0.6111,
+        "recall@10": 0.8333
+      },
+      "paraphrase": {
+        "n": 5,
+        "mrr": 0.3167,
+        "recall@1": 0.2,
+        "recall@3": 0.4,
+        "recall@5": 0.4,
+        "recall@10": 0.8
+      },
+      "symptom": {
+        "n": 9,
+        "mrr": 0.1759,
+        "recall@1": 0.1111,
+        "recall@3": 0.2222,
+        "recall@5": 0.3333,
+        "recall@10": 0.3333
+      }
+    }
+  },
+  "questions": [
+    {
+      "id": "backprop-equations",
+      "style": "verbatim-term",
+      "topic": "backpropagation",
+      "rank": 1,
+      "top_score": 0.5715,
+      "top_source": "Neural Networks and Deep Learning (Nielsen)",
+      "top_page": 66
+    },
+    {
+      "id": "sgd-minibatch",
+      "style": "verbatim-term",
+      "topic": "gradient descent",
+      "rank": 2,
+      "top_score": 0.7015,
+      "top_source": "Dive into Deep Learning",
+      "top_page": 454
+    },
+    {
+      "id": "sgd-batch-tradeoff",
+      "style": "symptom",
+      "topic": "gradient descent",
+      "rank": null,
+      "top_score": 0.5009,
+      "top_source": "Neural Machine Translation and Sequence-to-sequence Models- A Tutorial",
+      "top_page": 14
+    },
+    {
+      "id": "momentum-method",
+      "style": "verbatim-term",
+      "topic": "momentum",
+      "rank": 5,
+      "top_score": 0.7505,
+      "top_source": "Neural Networks and Deep Learning (Nielsen)",
+      "top_page": 166
+    },
+    {
+      "id": "momentum-oscillation",
+      "style": "symptom",
+      "topic": "momentum",
+      "rank": 1,
+      "top_score": 0.493,
+      "top_source": "Why Momentum Really Works",
+      "top_page": 1
+    },
+    {
+      "id": "adam-bias-correction",
+      "style": "verbatim-term",
+      "topic": "adaptive optimizers",
+      "rank": 1,
+      "top_score": 0.6754,
+      "top_source": "ADAM- A METHOD FOR STOCHASTIC OPTIMIZATION",
+      "top_page": 3
+    },
+    {
+      "id": "cross-entropy-loss",
+      "style": "verbatim-term",
+      "topic": "loss functions",
+      "rank": 3,
+      "top_score": 0.7405,
+      "top_source": "Dive into Deep Learning",
+      "top_page": 921
+    },
+    {
+      "id": "cross-entropy-why-log",
+      "style": "paraphrase",
+      "topic": "loss functions",
+      "rank": 8,
+      "top_score": 0.57,
+      "top_source": "Dive into Deep Learning",
+      "top_page": 129
+    },
+    {
+      "id": "dropout-what",
+      "style": "verbatim-term",
+      "topic": "regularization",
+      "rank": 3,
+      "top_score": 0.7552,
+      "top_source": "Neural Networks and Deep Learning (Nielsen)",
+      "top_page": 126
+    },
+    {
+      "id": "overfitting-symptom",
+      "style": "symptom",
+      "topic": "regularization",
+      "rank": null,
+      "top_score": 0.498,
+      "top_source": "THE LOTTERY TICKET HYPOTHESIS- FINDING SPARSE, TRAINABLE NEURAL NETWORKS",
+      "top_page": 14
+    },
+    {
+      "id": "batchnorm-covariate-shift",
+      "style": "verbatim-term",
+      "topic": "normalization",
+      "rank": 7,
+      "top_score": 0.7129,
+      "top_source": "Dive into Deep Learning",
+      "top_page": 304
+    },
+    {
+      "id": "layernorm-vs-batchnorm",
+      "style": "verbatim-term",
+      "topic": "normalization",
+      "rank": 7,
+      "top_score": 0.8143,
+      "top_source": "Dive into Deep Learning",
+      "top_page": 299
+    },
+    {
+      "id": "layernorm-small-batch",
+      "style": "symptom",
+      "topic": "normalization",
+      "rank": null,
+      "top_score": 0.6577,
+      "top_source": "Dive into Deep Learning",
+      "top_page": 305
+    },
+    {
+      "id": "residual-block",
+      "style": "verbatim-term",
+      "topic": "residual connections",
+      "rank": 8,
+      "top_score": 0.5073,
+      "top_source": "Dive into Deep Learning",
+      "top_page": 636
+    },
+    {
+      "id": "deeper-worse",
+      "style": "symptom",
+      "topic": "residual connections",
+      "rank": 4,
+      "top_score": 0.5929,
+      "top_source": "Deep Residual Learning for Image Recognition",
+      "top_page": 5
+    },
+    {
+      "id": "conv-translation-invariance",
+      "style": "verbatim-term",
+      "topic": "convolutional networks",
+      "rank": 2,
+      "top_score": 0.5766,
+      "top_source": "Neural Networks and Deep Learning (Nielsen)",
+      "top_page": 231
+    },
+    {
+      "id": "conv-weight-reuse",
+      "style": "paraphrase",
+      "topic": "convolutional networks",
+      "rank": 8,
+      "top_score": 0.5422,
+      "top_source": "Dive into Deep Learning",
+      "top_page": 298
+    },
+    {
+      "id": "lstm-gates",
+      "style": "verbatim-term",
+      "topic": "recurrent networks",
+      "rank": 1,
+      "top_score": 0.7663,
+      "top_source": "Dive into Deep Learning",
+      "top_page": 365
+    },
+    {
+      "id": "lstm-long-memory",
+      "style": "symptom",
+      "topic": "recurrent networks",
+      "rank": null,
+      "top_score": 0.5878,
+      "top_source": "Neural Machine Translation and Sequence-to-sequence Models- A Tutorial",
+      "top_page": 30
+    },
+    {
+      "id": "gradient-clipping",
+      "style": "verbatim-term",
+      "topic": "training stability",
+      "rank": 1,
+      "top_score": 0.4761,
+      "top_source": "Dive into Deep Learning",
+      "top_page": 345
+    },
+    {
+      "id": "seq2seq-bottleneck",
+      "style": "paraphrase",
+      "topic": "sequence to sequence",
+      "rank": 3,
+      "top_score": 0.5631,
+      "top_source": "Neural Machine Translation and Sequence-to-sequence Models- A Tutorial",
+      "top_page": 46
+    },
+    {
+      "id": "attention-alignment",
+      "style": "verbatim-term",
+      "topic": "attention",
+      "rank": null,
+      "top_score": 0.7243,
+      "top_source": "Neural Machine Translation and Sequence-to-sequence Models- A Tutorial",
+      "top_page": 53
+    },
+    {
+      "id": "scaled-dot-product",
+      "style": "verbatim-term",
+      "topic": "attention",
+      "rank": 6,
+      "top_score": 0.6364,
+      "top_source": "Dive into Deep Learning",
+      "top_page": 402
+    },
+    {
+      "id": "word-order-ignored",
+      "style": "symptom",
+      "topic": "transformers",
+      "rank": null,
+      "top_score": 0.5605,
+      "top_source": "StatQuest Illustrated Guide to Neural Networks and AI",
+      "top_page": 225
+    },
+    {
+      "id": "cbow-vs-skipgram",
+      "style": "verbatim-term",
+      "topic": "word embeddings",
+      "rank": 3,
+      "top_score": 0.6121,
+      "top_source": "Dive into Deep Learning",
+      "top_page": 652
+    },
+    {
+      "id": "glove-cooccurrence",
+      "style": "paraphrase",
+      "topic": "word embeddings",
+      "rank": null,
+      "top_score": 0.6499,
+      "top_source": "GloVe- Global Vectors for Word Representation",
+      "top_page": 2
+    },
+    {
+      "id": "bpe-subwords",
+      "style": "verbatim-term",
+      "topic": "tokenization",
+      "rank": null,
+      "top_score": 0.7225,
+      "top_source": "Dive into Deep Learning",
+      "top_page": 673
+    },
+    {
+      "id": "oov-garbage",
+      "style": "symptom",
+      "topic": "tokenization",
+      "rank": 3,
+      "top_score": 0.6177,
+      "top_source": "Neural Machine Translation and Sequence-to-sequence Models- A Tutorial",
+      "top_page": 55
+    },
+    {
+      "id": "bert-mlm",
+      "style": "verbatim-term",
+      "topic": "pretraining",
+      "rank": null,
+      "top_score": 0.7575,
+      "top_source": "Dive into Deep Learning",
+      "top_page": 685
+    },
+    {
+      "id": "cheap-finetune",
+      "style": "paraphrase",
+      "topic": "fine-tuning",
+      "rank": 1,
+      "top_score": 0.5155,
+      "top_source": "LORA- LOW-RANK ADAPTATION OF LARGE LANGUAGE MODELS",
+      "top_page": 2
+    },
+    {
+      "id": "rag-nonparametric",
+      "style": "verbatim-term",
+      "topic": "retrieval-augmented generation",
+      "rank": 4,
+      "top_score": 0.7026,
+      "top_source": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks",
+      "top_page": 9
+    },
+    {
+      "id": "repetitive-generation",
+      "style": "symptom",
+      "topic": "decoding",
+      "rank": null,
+      "top_score": 0.4534,
+      "top_source": "Language Models are Few-Shot Learners",
+      "top_page": 23
+    },
+    {
+      "id": "neg-diffusion",
+      "style": "verbatim-term",
+      "topic": "diffusion models",
+      "rank": null,
+      "top_score": 0.4208,
+      "top_source": "Dive into Deep Learning",
+      "top_page": 180
+    },
+    {
+      "id": "neg-state-space",
+      "style": "verbatim-term",
+      "topic": "state space models",
+      "rank": null,
+      "top_score": 0.6,
+      "top_source": "Dive into Deep Learning",
+      "top_page": 399
+    },
+    {
+      "id": "neg-gnn",
+      "style": "verbatim-term",
+      "topic": "graph neural networks",
+      "rank": null,
+      "top_score": 0.5086,
+      "top_source": "Dive into Deep Learning",
+      "top_page": 186
+    },
+    {
+      "id": "neg-moe",
+      "style": "verbatim-term",
+      "topic": "mixture of experts",
+      "rank": null,
+      "top_score": 0.5361,
+      "top_source": "Training Compute-Optimal Large Language Models",
+      "top_page": 21
+    },
+    {
+      "id": "neg-distillation",
+      "style": "verbatim-term",
+      "topic": "knowledge distillation",
+      "rank": null,
+      "top_score": 0.5779,
+      "top_source": "Language Models are Few-Shot Learners",
+      "top_page": 34
+    }
+  ]
+}

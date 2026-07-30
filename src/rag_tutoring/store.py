@@ -165,3 +165,26 @@ class VectorStore:
     def count(self) -> int:
         """Number of chunks currently indexed."""
         return self.collection.count()
+
+    def sources(self) -> set[str]:
+        """Documents that actually have chunks in the index.
+
+        Read from the index rather than from ``data/raw``, because those two can
+        disagree -- an interrupted ingestion leaves a document on disk but not
+        indexed. Provenance stamped on an eval report has to describe what was
+        searched, not what was available.
+        """
+        got = self.collection.get(include=["metadatas"])
+        return {str(m["source"]) for m in got["metadatas"]}
+
+    def pages_present(self, source: str) -> set[int]:
+        """Pages of ``source`` that have at least one chunk indexed.
+
+        Exists for the eval harness to check its own ground truth: a label
+        naming a page that was never indexed -- a typo, or a page whose text
+        would not extract -- can never be retrieved, so it scores as a miss that
+        looks like poor retrieval. Same shape of bug as the silent truncation:
+        the number comes out wrong and nothing complains.
+        """
+        got = self.collection.get(where={"source": source}, include=["metadatas"])
+        return {int(m["page"]) for m in got["metadatas"]}
