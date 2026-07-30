@@ -9,8 +9,11 @@ Pilot target: real tutoring students, summer 2026.
 
 ## Status
 
-**Phase 1 — ingestion + basic retrieval, notebook-level.** Scaffold only; no
-ingestion code written yet.
+**Phase 1 — ingestion + basic retrieval, notebook-level.** Working end to end
+in `notebooks/01_ingest_and_retrieve.ipynb`: source PDFs are chunked, embedded
+locally, stored in Chroma, and queried to return the most relevant passages
+with citations (document title + page). Running against a starter slice of the
+corpus; scaling to the full set and building the Phase 2 eval set are next.
 
 ## Roadmap
 
@@ -45,11 +48,12 @@ local) and start JupyterLab:
 jupyter lab
 ```
 
-Lint and format:
+Lint, format, and test:
 
 ```bash
 ruff check .
 ruff format .
+pytest
 ```
 
 ## Layout
@@ -57,6 +61,7 @@ ruff format .
 ```
 src/rag_tutoring/    Library code. Imported by notebooks now, by the API later.
 notebooks/           Phase 1 exploration.
+tests/               Unit tests for the logic that is easy to get subtly wrong.
 data/raw/            Source tutoring materials (gitignored).
 data/processed/      Chunked/derived artifacts (gitignored).
 eval/                Phase 2 eval set: questions with known-correct sources.

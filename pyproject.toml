@@ -11,6 +11,9 @@ dependencies = [
     "chromadb>=0.5",
     "sentence-transformers>=3.0",
     "pypdf>=4.0",
+    # Chunking sizes windows in word-pieces, so it loads the model's tokenizer
+    # (vocabulary only, no weights) directly rather than via sentence-transformers.
+    "transformers>=4.40",
 ]
 
 [project.optional-dependencies]

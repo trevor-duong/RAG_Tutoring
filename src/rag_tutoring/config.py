@@ -32,8 +32,15 @@ CHROMA_DIR = ROOT / "chroma"
 # docs/decisions/0001-vector-store-and-embeddings.md.
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
-# Chunking, in words. all-MiniLM-L6-v2 truncates input at 256 word-pieces
-# (~1.3x words), so a ~160-word target keeps whole chunks inside the model's
-# window instead of silently dropping their tails.
-CHUNK_WORDS = 160
-CHUNK_OVERLAP_WORDS = 40
+# Hard limit of the embedding model: input longer than this is truncated, and
+# sentence-transformers does it *silently*. Chunks are therefore measured in
+# word-pieces, not words -- a word costs anywhere from 1 to ~4 word-pieces in
+# this corpus (math notation and long technical terms split hard), so no word
+# count can guarantee a chunk fits. Measured: a 160-word chunk ranged from 90
+# to 549 word-pieces, and 34% of them overflowed.
+MODEL_MAX_TOKENS = 256
+
+# Chunking budget, in word-pieces. Sits under MODEL_MAX_TOKENS with room for
+# the [CLS]/[SEP] the tokenizer adds, plus margin.
+CHUNK_MAX_TOKENS = 240
+CHUNK_OVERLAP_TOKENS = 60
