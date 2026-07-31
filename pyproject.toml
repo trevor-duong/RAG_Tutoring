@@ -14,6 +14,8 @@ dependencies = [
     # Chunking sizes windows in word-pieces, so it loads the model's tokenizer
     # (vocabulary only, no weights) directly rather than via sentence-transformers.
     "transformers>=4.40",
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
 ]
 
 [project.optional-dependencies]
@@ -21,6 +23,9 @@ dev = [
     "jupyterlab>=4.0",
     "ruff>=0.6",
     "pytest>=8.0",
+    # Required by fastapi.testclient. Chroma already pulls it in transitively;
+    # pinned here so the test suite does not depend on that staying true.
+    "httpx>=0.27",
 ]
 
 [tool.setuptools.packages.find]

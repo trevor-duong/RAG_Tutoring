@@ -9,11 +9,9 @@ Pilot target: real tutoring students, summer 2026.
 
 ## Status
 
-**Phase 1 complete; starting Phase 2 — API + eval.** Source PDFs are chunked,
-embedded locally, stored in Chroma, and queried to return the most relevant
-passages with citations (document title + page); the pipeline is walkable in
-`notebooks/01_ingest_and_retrieve.ipynb`. The full corpus is indexed — 9,169
-chunks from 37 documents — and retrieval quality is now measured rather than
+**Phase 2 — API + eval.** Source PDFs are chunked, embedded locally, stored in
+Chroma, and served over HTTP as cited passages. The full corpus is indexed —
+9,169 chunks from 37 documents — and retrieval quality is measured rather than
 eyeballed:
 
 ```bash
@@ -22,7 +20,20 @@ python scripts/run_eval.py --save eval/baseline.json
 
 Current baseline is **recall@5 = 0.50** over 32 labelled questions, with the
 score broken out by how the question is phrased. See `eval/README.md` for what
-the numbers do and do not support. FastAPI and citation formatting are next.
+the numbers do and do not support.
+
+Next: the Phase 3 frontend. Retrieval improvements are deliberately deferred and
+written up as experiments to run against this frozen baseline, not done now.
+
+### The API retrieves; it does not answer
+
+`POST /ask` returns the passages that best match a question, each cited, and
+leaves the reading to the student. There is no generation step, on purpose: a
+correct page is in the top 5 half the time but is the *top* hit only 19% of the
+time, so synthesising one confident answer from the top hits would turn a
+retrieval miss into fluent prose a student cannot audit. Showing five sources
+with their scores puts the judgement where the evidence supports it. Generation,
+when it comes, consumes this same response.
 
 ## Roadmap
 
@@ -78,6 +89,28 @@ circular:
 python scripts/find_passage.py "internal covariate shift" --source "Batch Norm"
 ```
 
+## Running the API
+
+Needs an index already built (the sequence above).
+
+```bash
+uvicorn rag_tutoring.api:app --reload
+```
+
+```bash
+curl -s -X POST localhost:8000/ask -H 'Content-Type: application/json' \
+  -d '{"question":"Why does my training loss go down but validation error go up?","k":3}'
+```
+
+`GET /health` reports what is actually indexed — model, chunk budget, collection,
+chunk and document counts — because a result set means little without the index
+that produced it. Interactive docs at `/docs`.
+
+Citations say **"PDF page 14"**, not "p. 14". The page is pypdf's index, which
+matches a PDF viewer's counter but *not* the number printed on the page — front
+matter puts those 18 apart in *Dive into Deep Learning*. A bare "p. 14" would be
+followable and wrong; see `src/rag_tutoring/citations.py`.
+
 To explore the pipeline interactively:
 
 ```bash
@@ -95,7 +128,7 @@ pytest
 ## Layout
 
 ```
-src/rag_tutoring/    Library code. Imported by notebooks now, by the API later.
+src/rag_tutoring/    Library code: ingest, store, evaluate, citations, api.
 notebooks/           Phase 1 exploration.
 scripts/             Rebuild the index, audit it, find passages, run the eval.
 tests/               Unit tests for the logic that is easy to get subtly wrong.
