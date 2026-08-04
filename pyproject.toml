@@ -31,6 +31,17 @@ dev = [
 [tool.setuptools.packages.find]
 where = ["src"]
 
+# The frontend is packaged data, not a source file that happens to sit nearby.
+# setuptools' `include-package-data` default already puts it in the wheel -- checked,
+# it ships with this section removed -- so this is a pin rather than the mechanism:
+# it states the dependency instead of inheriting it from a default that has changed
+# before and that a later MANIFEST.in could narrow. The failure it pins against is
+# silent and one-sided: an editable install resolves the page off the filesystem and
+# the whole suite passes, while a wheel missing it only fails at `GET /` in the
+# container. `unzip -l` on the built wheel is the check that actually covers that.
+[tool.setuptools.package-data]
+rag_tutoring = ["static/*.html"]
+
 [tool.ruff]
 line-length = 100
 src = ["src"]

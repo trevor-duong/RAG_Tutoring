@@ -9,8 +9,9 @@ Pilot target: real tutoring students, summer 2026.
 
 ## Status
 
-**Phase 2 — API + eval.** Source PDFs are chunked, embedded locally, stored in
-Chroma, and served over HTTP as cited passages. The full corpus is indexed —
+**Phase 3 — frontend + deploy.** Source PDFs are chunked, embedded locally, stored
+in Chroma, served over HTTP as cited passages, and searchable from a single page.
+Not yet deployed. The full corpus is indexed —
 9,169 chunks from 37 documents — and retrieval quality is measured rather than
 eyeballed:
 
@@ -22,8 +23,9 @@ Current baseline is **recall@5 = 0.50** over 32 labelled questions, with the
 score broken out by how the question is phrased. See `eval/README.md` for what
 the numbers do and do not support.
 
-Next: the Phase 3 frontend. Retrieval improvements are deliberately deferred and
-written up as experiments to run against this frozen baseline, not done now.
+A single-page frontend at `/` consumes that API. Next: deploy, then 2–3 real
+students. Retrieval improvements are deliberately deferred and written up as
+experiments to run against this frozen baseline, not done now.
 
 ### The API retrieves; it does not answer
 
@@ -111,6 +113,31 @@ matches a PDF viewer's counter but *not* the number printed on the page — fron
 matter puts those 18 apart in *Dive into Deep Learning*. A bare "p. 14" would be
 followable and wrong; see `src/rag_tutoring/citations.py`.
 
+## The frontend
+
+`GET /` serves one self-contained HTML file — `src/rag_tutoring/static/index.html`,
+inline CSS and JS, no build step. It is packaged data, so `pip install .` carries
+it into a container; `unzip -l` on a built wheel is the check that it did.
+
+One file served by the same process, rather than a separate app, means one
+deployable artifact and no CORS surface at all, because the page and the API share
+an origin. A component framework would buy routing and reuse that one page has no
+use for.
+
+The page fixes `k=5` and does not expose it. The baseline is recall@5, so five is
+the number the measurement supports; a control inviting `k=20` would return a tail
+that reads as more evidence and is mostly noise. `MAX_K` stays where it belongs, as
+a server-side guard. Styling is lifted from
+[trevor-duong.github.io](https://trevor-duong.github.io) so the two read as one
+portfolio.
+
+Two frontend rules are pinned by tests, because both fail silently in a browser
+where no Python test would see them: the page renders the server's `page_label`
+verbatim and never composes a reference from the raw index, and it references only
+routes this app actually registers.
+
+## Development
+
 To explore the pipeline interactively:
 
 ```bash
@@ -129,6 +156,7 @@ pytest
 
 ```
 src/rag_tutoring/    Library code: ingest, store, evaluate, citations, api.
+src/rag_tutoring/static/  The one page the API serves.
 notebooks/           Phase 1 exploration.
 scripts/             Rebuild the index, audit it, find passages, run the eval.
 tests/               Unit tests for the logic that is easy to get subtly wrong.

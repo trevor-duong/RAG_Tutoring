@@ -13,15 +13,19 @@ consumes this same response and needs nothing here to change.
 Run it with::
 
     uvicorn rag_tutoring.api:app --reload
+
+That serves the JSON API and, at ``/``, the one static page that consumes it.
 """
 
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from dataclasses import asdict
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Request
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from rag_tutoring.citations import cite
@@ -29,6 +33,12 @@ from rag_tutoring.config import CHUNK_MAX_TOKENS, CHUNK_OVERLAP_TOKENS, EMBEDDIN
 from rag_tutoring.store import VectorStore
 
 MAX_K = 20
+
+# Resolved from this module rather than the working directory, so the page is found
+# whether the server is started from the repo root or anywhere else. It travels with
+# the package as data -- declared in ``pyproject.toml`` under ``package-data``, where
+# the comment explains what that declaration does and does not buy.
+INDEX_HTML = Path(__file__).parent / "static" / "index.html"
 
 
 class AskRequest(BaseModel):
@@ -147,3 +157,18 @@ def health(request: Request) -> IndexInfo:
     a load balancer polling this endpoint cannot make it expensive.
     """
     return request.app.state.index_info
+
+
+@app.get("/", include_in_schema=False)
+def index() -> FileResponse:
+    """Serve the one page that consumes this API.
+
+    A single self-contained file served by the same process, rather than a
+    separate frontend: it means one deployable artifact, no build step, and no
+    CORS surface at all, because the page and the API share an origin. A
+    component framework would buy routing and reuse that one page has no use for.
+
+    Kept out of the OpenAPI schema -- it is the UI, not an operation a client
+    calls.
+    """
+    return FileResponse(INDEX_HTML)

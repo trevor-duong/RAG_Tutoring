@@ -15,12 +15,33 @@ exercise the real wiring, which has to be checked by starting the server.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 import pytest
 from fastapi.testclient import TestClient
 
-from rag_tutoring.api import MAX_K, IndexInfo, app, get_store
+from rag_tutoring.api import INDEX_HTML, MAX_K, IndexInfo, app, get_store
+
+
+def _script_of(page: str) -> str:
+    """The page's JavaScript, with ``//`` comments removed.
+
+    Assertions about what the frontend *does* have to read the code, not the
+    comments explaining the code -- a comment warning against a pattern contains
+    that pattern. Splitting on ``//`` also truncates any URL on a code line, which
+    is harmless here and would matter if this were ever used for more than
+    substring checks.
+
+    The single-block assertion is the point: this returns *a* script, and adding a
+    second one would silently shrink what every caller checks while leaving them
+    green. Splitting the page's JavaScript is a fine thing to do -- it just has to
+    be done here too, deliberately, rather than discovered later.
+    """
+    blocks = page.split("<script>")[1:]
+    assert len(blocks) == 1, "the page has more than one script block; widen this helper"
+    body = blocks[0].split("</script>")[0]
+    return "\n".join(line.split("//")[0] for line in body.splitlines())
 
 
 @dataclass(frozen=True)
@@ -136,6 +157,51 @@ def test_too_short_a_question_is_rejected(client, store, question):
 
 def test_an_overlong_question_is_rejected(client, store):
     assert client.post("/ask", json={"question": "x" * 1001}).status_code == 422
+
+
+def test_the_page_is_served_from_packaged_data(client):
+    """``INDEX_HTML`` is resolved from the module, so this fails if the file moves.
+
+    Asserting on the status code alone would be close to unfailable. The header
+    check is what distinguishes "served the page" from "served something".
+    """
+    response = client.get("/")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+
+
+def test_the_page_posts_to_the_endpoint_it_is_served_with():
+    """Pin the one contract that spans the two halves of this phase.
+
+    The page hardcodes its own API paths, so renaming a route leaves the tests
+    above passing and the UI silently broken -- the request 404s in a browser
+    nobody is watching during a test run. Reading the served page and checking it
+    references the routes this module actually registers is what makes that
+    failure visible here instead of in front of a student.
+    """
+    script = _script_of(INDEX_HTML.read_text())
+    registered = {route.path for route in app.routes}
+    for call in ('fetch("/ask"', 'fetch("/health")'):
+        assert call in script, f"the page no longer calls {call}"
+    assert {"/ask", "/health", "/"} <= registered
+
+
+def test_the_page_never_touches_the_raw_page_index():
+    """The frontend must render ``page_label``, never compose a reference itself.
+
+    ``citations.py`` exists because ``Chunk.page`` is pypdf's index, not the
+    number printed on the page. A template literal like ``p. ${c.page}`` in the
+    browser would reintroduce exactly that misdirection, and no test of the Python
+    would catch it, because the defect would live entirely in the frontend.
+
+    Scoped to the script and with comments stripped, so the assertion is about
+    what the page executes rather than what it says about itself -- the prose
+    above the offending line necessarily names the pattern it is warning against.
+    """
+    script = _script_of(INDEX_HTML.read_text())
+    assert "page_label" in script, "the label must reach the reader"
+    assert not re.search(r"c\.page\b", script), "the raw index must not be rendered"
+    assert "p. " not in script, "a hardcoded 'p. ' is the citation bug this guards"
 
 
 def test_health_reports_what_is_actually_indexed(client, stamped_index_info):

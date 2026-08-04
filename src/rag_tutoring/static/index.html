@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RAG Tutoring — search the course materials</title>
+
+  <!-- Crawler hygiene, not access control: this page searches copyrighted course
+       materials, so it should not be indexed. A meta tag is a request a crawler
+       may honour, and nothing more -- keeping the deployment itself private is a
+       separate decision, made at the host. -->
+  <meta name="robots" content="noindex, nofollow">
+
+  <!-- display=swap so text paints in the fallback face immediately rather than
+       waiting on Google's CDN. The fallback stack below is what a student on bad
+       wifi actually reads. -->
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600&display=swap">
+
+  <style>
+    /* Palette, type, and the container width are lifted from
+       trevor-duong.github.io (src/styles/_vars.scss, _base.scss) so this reads as
+       part of the same portfolio rather than a different site. */
+    :root {
+      --main: #1a222c;
+      --sec: #4b5664;
+      --accent: #54516a;
+      --body: #555;
+      --heading: #333;
+      --rule: #e4e6ea;
+      --cut: 550px;
+    }
+
+    * { box-sizing: border-box; }
+
+    /* Column layout so the footer sits at the bottom of a short page instead of
+       floating directly under an empty results area. */
+    body {
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      font-size: 100%;
+      line-height: 1.5;
+      color: var(--body);
+      font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+                   Helvetica, Arial, sans-serif;
+    }
+
+    h1, h2, h3 { line-height: 1.25; color: var(--heading); }
+
+    /* The site's container: 90% of a narrow screen, 80% once there is room. */
+    .container {
+      width: 90%;
+      max-width: 960px;
+      margin: 0 auto;
+    }
+    @media only screen and (min-width: 550px) {
+      .container { width: 80%; }
+    }
+
+    .masthead {
+      background: var(--main);
+      color: #fff;
+      padding: 2.5rem 0 2rem;
+      text-align: center;
+    }
+    .masthead h1 {
+      color: #fff;
+      margin: 0;
+      font-size: 1.9rem;
+      font-weight: 600;
+    }
+    .masthead p {
+      margin: 0.6rem auto 0;
+      max-width: 34rem;
+      font-size: 0.95rem;
+      color: #c9ced6;
+    }
+    @media only screen and (min-width: 550px) {
+      .masthead h1 { font-size: 2.5rem; }
+    }
+
+    main { flex: 1; padding: 2rem 0 3rem; }
+
+    /* The no-generation stance, kept above the results rather than in the footer:
+       a student reads top-down and stops at the first thing that looks like an
+       answer, so the caveat has to arrive before the passages do. */
+    .lede {
+      margin: 1.5rem 0 0;
+      padding-left: 0.9rem;
+      border-left: 3px solid var(--rule);
+      font-size: 0.9rem;
+    }
+
+    form {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    @media only screen and (min-width: 550px) {
+      form { flex-direction: row; }
+    }
+
+    #question {
+      flex: 1;
+      font-family: inherit;
+      font-size: 1rem;
+      color: var(--heading);
+      padding: 0.7rem 0.85rem;
+      border: 1px solid var(--rule);
+      border-radius: 10px;
+      outline: none;
+      transition: border-color 0.3s ease-out;
+    }
+    #question:focus { border-color: var(--accent); }
+
+    /* The site's .project-link: transparent until hover, then fills with $purple. */
+    button {
+      display: inline-block;
+      font-family: inherit;
+      font-size: 1rem;
+      padding: 0.7rem 1.4rem;
+      color: var(--main);
+      background-color: transparent;
+      border: 1px solid var(--main);
+      border-radius: 10px;
+      cursor: pointer;
+      outline: none;
+      transition: color 0.3s ease-out, background-color 0.3s ease-out,
+                  border-color 0.3s ease-out;
+    }
+    button:hover:not(:disabled), button:active:not(:disabled) {
+      background-color: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      transition: color 0.3s ease-in, background-color 0.3s ease-in,
+                  border-color 0.3s ease-in;
+    }
+    button:disabled { opacity: 0.5; cursor: default; }
+
+    #status {
+      margin: 1.5rem 0 0;
+      font-size: 0.9rem;
+      color: var(--sec);
+    }
+    #status:empty { margin: 0; }
+
+    .citation {
+      padding: 1.25rem 0;
+      border-top: 1px solid var(--rule);
+    }
+    .citation:first-child { border-top: none; }
+
+    .citation h3 {
+      margin: 0;
+      font-size: 1.05rem;
+      font-weight: 600;
+    }
+
+    .meta {
+      margin: 0.35rem 0 0.75rem;
+      font-size: 0.8rem;
+      color: var(--sec);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem 0.9rem;
+    }
+
+    /* Borrowed from .project-status -- a dashed pill, used here to mark the
+       similarity score as a measurement rather than a verdict. */
+    .score {
+      display: inline-block;
+      padding: 0 0.5rem;
+      font-style: italic;
+      border: 1px dashed var(--main);
+      border-radius: 10px;
+      color: var(--main);
+    }
+
+    .snippet { margin: 0; }
+
+    footer {
+      border-top: 1px solid var(--rule);
+      padding: 1.5rem 0 2.5rem;
+      font-size: 0.8rem;
+      color: var(--sec);
+    }
+    footer p { margin: 0.35rem 0; }
+    #index-info { font-style: italic; }
+  </style>
+</head>
+<body>
+  <header class="masthead">
+    <div class="container">
+      <h1>RAG Tutoring</h1>
+      <p>Search my deep learning tutoring materials. Ask a question and get the
+         passages that match it, cited so you can go read the source.</p>
+    </div>
+  </header>
+
+  <main class="container">
+    <form id="ask">
+      <!-- The bounds mirror the server's AskRequest, so the common mistake is
+           caught before it costs a round trip. The server still validates: this
+           is convenience, not the check. -->
+      <input id="question" name="question" type="text" required
+             minlength="3" maxlength="1000" autocomplete="off"
+             placeholder="Why does my training loss go down but validation error go up?">
+      <button id="submit" type="submit">Ask</button>
+    </form>
+
+    <p class="lede">This finds passages; it does not write an answer. You get five
+       sources, closest match first &mdash; and the right page is in the top five
+       about half the time, so scan all five rather than trusting the first.</p>
+
+    <p id="status"></p>
+    <div id="results"></div>
+  </main>
+
+  <footer class="container">
+    <p id="index-info"></p>
+  </footer>
+
+  <script>
+    // Fixed, not exposed as a control. The eval baseline is recall@5, so five is
+    // the number the measurement actually supports; a slider would invite asking
+    // for twenty and reading the tail as though it meant something. The server's
+    // MAX_K bound stays where it belongs, as a guard rather than a feature.
+    const K = 5;
+
+    const form = document.getElementById("ask");
+    const input = document.getElementById("question");
+    const button = document.getElementById("submit");
+    const status = document.getElementById("status");
+    const results = document.getElementById("results");
+
+    function setStatus(message) {
+      status.textContent = message;
+    }
+
+    function clearResults() {
+      results.replaceChildren();
+    }
+
+    // Every value below is written with textContent. Snippets are text extracted
+    // from PDFs and the question is whatever was typed; neither is markup, and
+    // innerHTML here would turn a passage containing "<" into a rendering bug and
+    // the question echo into self-XSS.
+    function render(citations) {
+      const nodes = citations.map((c) => {
+        const article = document.createElement("article");
+        article.className = "citation";
+
+        const title = document.createElement("h3");
+        title.textContent = c.document;
+
+        const meta = document.createElement("p");
+        meta.className = "meta";
+
+        // page_label comes from the server verbatim. It says "PDF page 14"
+        // because Chunk.page is pypdf's index, which matches a PDF viewer's
+        // counter but not the number printed on the page -- 18 apart in Dive
+        // into Deep Learning. Building "p. " + c.page here would recreate
+        // exactly the misdirection citations.py exists to prevent.
+        const page = document.createElement("span");
+        page.textContent = c.page_label;
+
+        const kind = document.createElement("span");
+        kind.textContent = c.source_type;
+
+        const score = document.createElement("span");
+        score.className = "score";
+        score.textContent = "similarity " + c.score.toFixed(2);
+
+        meta.append(page, kind, score);
+
+        const snippet = document.createElement("p");
+        snippet.className = "snippet";
+        snippet.textContent = c.snippet;
+
+        article.append(title, meta, snippet);
+        return article;
+      });
+      results.replaceChildren(...nodes);
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const question = input.value.trim();
+      if (question.length < 3) return;
+
+      button.disabled = true;
+      setStatus("Searching…");
+      clearResults();
+
+      try {
+        const response = await fetch("/ask", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question, k: K }),
+        });
+
+        // A 422 body is {"detail": [...]} -- an array of objects. Printing it
+        // would show a student "[object Object]", so every failure gets one
+        // fixed sentence and the details stay in the network tab.
+        if (!response.ok) {
+          setStatus("Something went wrong searching. Try rephrasing, or try again.");
+          return;
+        }
+
+        const data = await response.json();
+        if (data.citations.length === 0) {
+          setStatus("Nothing matched that question.");
+          return;
+        }
+        // Nothing to announce on success: the passages are their own evidence,
+        // and the standing note above them already says how to read the order.
+        setStatus("");
+        render(data.citations);
+      } catch {
+        setStatus("Could not reach the server.");
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    // What was actually searched. The same provenance an eval report stamps:
+    // results mean little without the index that produced them.
+    (async () => {
+      try {
+        const info = await (await fetch("/health")).json();
+        document.getElementById("index-info").textContent =
+          info.documents_indexed + " documents · " +
+          info.chunks_indexed.toLocaleString() + " chunks · " +
+          info.embedding_model;
+      } catch {
+        // The footer line is provenance, not function. Failing to load it must
+        // not put an error in front of a student whose search worked.
+      }
+    })();
+  </script>
+</body>
+</html>
