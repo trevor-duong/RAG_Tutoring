@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from rag_tutoring.evaluate import Label, Question
-from rag_tutoring.generate import Answer, UngroundedCitation
+from rag_tutoring.generate import Answer, TruncatedAnswer, UngroundedCitation
 from rag_tutoring.generate_eval import run, summarise
 
 
@@ -57,6 +57,9 @@ class FakeGenerator:
     """Returns a canned answer, or raises, for every question."""
 
     model = "fake-model"
+    # Provenance is read off the generator, not off config, so a stub missing this
+    # attribute is a stub that no longer matches what it stands in for.
+    temperature = None
 
     def __init__(self, text: str = "grounded [source 1]", cited=(1,), raises=None) -> None:
         self.text = text
@@ -147,6 +150,27 @@ def test_an_ungrounded_citation_is_counted_not_raised():
     assert outcome.ungrounded
     assert not outcome.answered
     assert outcome.answer_chars == 0
+
+
+def test_a_truncated_answer_is_counted_not_raised():
+    """The expensive failure mode if this is missed.
+
+    ``run`` makes one paid call per question. Letting ``TruncatedAnswer`` propagate
+    would abort the run partway through and discard every answer already generated and
+    billed for -- and with the budget raised, truncation is rare enough to stay latent
+    until the one run that hits it.
+    """
+    store = FakeStore([("Dropout", 17)])
+    report = run(
+        store,
+        FakeGenerator(raises=TruncatedAnswer("hit the 2000-token budget")),
+        [question("q1", [("Dropout", 17)])],
+    )
+    (outcome,) = report.outcomes
+    assert outcome.truncated
+    assert not outcome.answered
+    assert not outcome.ungrounded, "a budget problem must not read as a citation problem"
+    assert summarise(report.outcomes)["truncated"] == 1
 
 
 def test_answer_text_is_kept_out_of_the_committed_artifact():

@@ -154,6 +154,45 @@ acknowledgments hit, arriving from the other direction, and the reason a
 structural filter at ingest is the next retrieval experiment rather than a
 nice-to-have.
 
+## Generation baseline (2026-08-05)
+
+First run of the second instrument, `claude-sonnet-5` at k=5 over the same 37
+questions:
+
+| partition | n | answered | uncited | ungrounded | truncated | cited-label | hedged\* |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| hit | 16 | 16 | 0 | 0 | 0 | 15 | 10 |
+| miss | 16 | 16 | 0 | 0 | 0 | 0 | 13 |
+| negative | 5 | 5 | 0 | 0 | 0 | 0 | 5 |
+
+**Zero ungrounded citations and zero uncited answers across 37 questions.** Every
+`[source N]` marker resolved to a passage actually supplied. That is the mechanical
+property the validation exists to enforce, and on this run it never had to fire.
+
+**All five negatives declined**, including the three whose topics appear only in
+bibliographies. The mixture-of-experts answer identified its passage as a reference
+entry rather than an explanation and named the paper as something not included — the
+specific failure this file called out as the hard case. n=5, so this is an existence
+proof that the mechanism can work, not a rate.
+
+**The hedge proxy under-counts.** All four `miss` answers it scored as unhedged do
+hedge, in wording it does not match — "the passages don't spell out", "this is a
+partial picture", "the direct comparison is limited". Treat 13/16 as a floor.
+
+**A "miss" is not a bad answer.** Several answers on labelled-miss questions are
+substantively right, because the corpus overlaps and retrieval surfaced correct but
+unlabelled pages — the incomplete-judgements caveat above, showing up from the
+generation side. `cited_a_labelled_page` is 0 on that partition by construction; it
+measures labelling, not quality.
+
+**These numbers are a sample, not a constant.** `claude-sonnet-5` rejects `temperature`
+and `top_p`, so decoding cannot be pinned. Between two runs an hour apart the hit
+partition's `cited-label` moved 16 → 15 and `hedged` moved 12 → 13 with no code change
+in between. Only a movement well outside that band is evidence of anything.
+
+\*hedged is a keyword proxy, not a judgement. The 21 miss and negative answers are
+short; reading them is the measurement.
+
 ## Files
 
 - `questions.jsonl` — the set. Notes paraphrase why a page answers a question;

@@ -28,6 +28,14 @@ DATA_RAW = ROOT / "data" / "raw"
 DATA_PROCESSED = ROOT / "data" / "processed"
 CHROMA_DIR = ROOT / "chroma"
 
+# Local-development secrets, read by the *entry points* (the API's lifespan and
+# scripts/run_generation_eval.py) and by nothing else. Deliberately not loaded here at
+# import time: the suite's defining property is that it runs with no key, and an import
+# side effect would quietly hand pytest whatever key happens to be on the developer's
+# disk. Gitignored. In a deployment nothing reads this file -- the platform injects real
+# environment variables, and the application only ever reads os.environ.
+ENV_FILE = ROOT / ".env"
+
 # Extracted page text, written by scripts/build_index.py during the indexing
 # pass. PDF extraction is by far the slowest step (one 709 MB illustrated
 # textbook takes ~10 minutes on its own), so the text is kept so that auditing
@@ -60,11 +68,29 @@ CHUNK_OVERLAP_TOKENS = 60
 # a re-run of the generation eval, not a rebuild.
 GENERATION_MODEL = "claude-sonnet-5"
 
-# Temperature 0 so a stored eval result is reproducible. Sampling would make a
-# baseline that shifts under re-runs, and then a prompt change and noise would be
-# indistinguishable -- the same reason the index is rebuilt rather than appended.
-GENERATION_TEMPERATURE = 0.0
+# None means "send no sampling parameter at all", and is not a placeholder for a value
+# to be filled in later. claude-sonnet-5 rejects both `temperature` and `top_p` with a
+# 400 -- verified against the live API, not assumed -- so there is no sampling control
+# to set on the configured model.
+#
+# This cost a property the eval was designed around. The intent was temperature 0, so a
+# stored baseline would not shift under re-runs and a prompt change could be told apart
+# from noise. That is no longer available here, which means
+# `eval/generation-baseline.json` is a **sample, not a constant**: a small movement
+# between runs is decoding variance, and only a large one is evidence of anything. Kept
+# as a knob rather than deleted because an older model (claude-sonnet-4-6, checked) still
+# accepts it, and because a deleted parameter reads as an oversight a later change would
+# quietly restore.
+GENERATION_TEMPERATURE: float | None = None
 
-# Answers orient a student toward passages shown directly beneath them; they are not
-# the deliverable on their own, so this is deliberately tight.
-GENERATION_MAX_TOKENS = 700
+# Not an answer-length setting. claude-sonnet-5 returns `thinking` blocks by default and
+# they are billed against this same ceiling, while `generate.py` keeps only the `text`
+# blocks -- so this budget is shared with reasoning a student never sees. At 700 the
+# 2026-08-05 eval truncated 2 of 37 answers mid-word, one of them mid-qualification.
+#
+# Answer length is held down by the prompt ("keep it short"), which is the right place
+# for it: a prompt that asks for brevity produces a complete short answer, whereas a
+# tight ceiling produces a long answer with its ending cut off. Raising this costs
+# nothing -- output tokens are billed as generated, not as reserved -- so the ceiling
+# exists only to bound a runaway.
+GENERATION_MAX_TOKENS = 2000

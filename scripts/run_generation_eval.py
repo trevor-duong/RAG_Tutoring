@@ -4,7 +4,8 @@
                                           [--answers eval/generation-answers.jsonl]
                                           [--model claude-sonnet-5] [--k 5]
 
-Needs ANTHROPIC_API_KEY. Makes one model call per question -- 37 by default, so this
+Needs ANTHROPIC_API_KEY, from the environment or a local .env. Makes one model call
+per question -- 37 by default, so this
 costs real money and real time; there is no caching between runs on purpose, because a
 cached answer would make a prompt change look like it did nothing.
 
@@ -25,6 +26,9 @@ from pathlib import Path
 
 logging.getLogger("transformers").setLevel(logging.CRITICAL)
 
+from dotenv import load_dotenv  # noqa: E402
+
+from rag_tutoring.config import ENV_FILE  # noqa: E402
 from rag_tutoring.evaluate import load_questions, unindexed_labels  # noqa: E402
 from rag_tutoring.generate import Generator  # noqa: E402
 from rag_tutoring.generate_eval import format_report, run  # noqa: E402
@@ -38,6 +42,9 @@ def main() -> int:
     ap.add_argument("--model", help="override the configured generation model")
     ap.add_argument("--k", type=int, default=5, help="passages handed to the model per question")
     args = ap.parse_args()
+
+    # Same entry-point rule as the API: the .env is read here, not on import.
+    load_dotenv(ENV_FILE)
 
     key = os.environ.get("ANTHROPIC_API_KEY")
     if not key:

@@ -87,6 +87,20 @@ class UngroundedCitation(Exception):
     """
 
 
+class TruncatedAnswer(Exception):
+    """The model ran out of output budget mid-answer.
+
+    Dropped rather than served, for the same reason an ungrounded citation is. The
+    dangerous property is *where* truncation lands: this prompt asks the model to state
+    what the passages do not cover, and that qualification is written last, so the cut
+    preferentially removes the hedge and leaves the confident part standing. A student
+    sees a shorter, more certain answer than the model actually produced.
+
+    Measured, not hypothesised: the 2026-08-05 eval truncated
+    ``batchnorm-covariate-shift`` at "but they do not confir", mid-qualification.
+    """
+
+
 @dataclass(frozen=True)
 class Answer:
     """A synthesised answer and the provenance needed to reproduce it."""
@@ -140,7 +154,7 @@ class Generator:
         self,
         client,
         model: str = GENERATION_MODEL,
-        temperature: float = GENERATION_TEMPERATURE,
+        temperature: float | None = GENERATION_TEMPERATURE,
         max_tokens: int = GENERATION_MAX_TOKENS,
     ) -> None:
         self.client = client
@@ -158,10 +172,16 @@ class Generator:
         if not citations:
             raise ValueError("cannot generate an answer with no retrieved passages")
 
+        # Omitted entirely rather than sent as a default, because the newer models
+        # reject the *presence* of the key, not a particular value -- see
+        # GENERATION_TEMPERATURE. Building the kwargs conditionally keeps one code path
+        # working across models that do and do not accept sampling control.
+        sampling = {} if self.temperature is None else {"temperature": self.temperature}
+
         response = self.client.messages.create(
             model=self.model,
             max_tokens=self.max_tokens,
-            temperature=self.temperature,
+            **sampling,
             system=SYSTEM_PROMPT,
             messages=[
                 {
@@ -172,6 +192,14 @@ class Generator:
                 }
             ],
         )
+        # Checked before the citations are parsed: a cut-off answer should be reported
+        # as truncated, not as whatever a half-written marker happened to parse into.
+        if getattr(response, "stop_reason", None) == "max_tokens":
+            raise TruncatedAnswer(
+                f"answer hit the {self.max_tokens}-token output budget; "
+                "the tail, where this prompt puts its qualifications, is missing"
+            )
+
         text = "".join(
             block.text for block in response.content if getattr(block, "type", None) == "text"
         ).strip()

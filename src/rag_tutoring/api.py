@@ -14,8 +14,10 @@ endpoint serves passages alone, which is a working product rather than a degrade
 keeps the test suite free of a key, and the whole suite runs with no index, no
 embedding model and no API key.
 
-If the model cites a passage it was not given, the answer is dropped and the passages
-are served alone. See ``generate.UngroundedCitation`` for why that is not repaired.
+Two failures drop the answer and serve the passages alone: a citation to a passage the
+model was not given, and an answer cut off by the output budget. Neither is repaired --
+see ``generate.UngroundedCitation`` and ``generate.TruncatedAnswer`` for why. Both leave
+``answer`` null, which is a state the page already renders.
 
 Run it with::
 
@@ -32,13 +34,24 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Annotated
 
+from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from rag_tutoring.citations import cite
-from rag_tutoring.config import CHUNK_MAX_TOKENS, CHUNK_OVERLAP_TOKENS, EMBEDDING_MODEL
-from rag_tutoring.generate import Generator, UngroundedCitation, generator_from_env
+from rag_tutoring.config import (
+    CHUNK_MAX_TOKENS,
+    CHUNK_OVERLAP_TOKENS,
+    EMBEDDING_MODEL,
+    ENV_FILE,
+)
+from rag_tutoring.generate import (
+    Generator,
+    TruncatedAnswer,
+    UngroundedCitation,
+    generator_from_env,
+)
 from rag_tutoring.store import VectorStore
 
 log = logging.getLogger(__name__)
@@ -134,6 +147,12 @@ async def lifespan(app: FastAPI):
     pilot, restarting after a rebuild is the honest fix -- invalidating it
     properly is the same cache-invalidation question Phase 4 takes up.
     """
+    # A local .env is read *here*, at the process entry point, rather than at import of
+    # config -- see the ENV_FILE comment. ``override=False`` is the default and the one
+    # that matters: a real environment variable, which is how a deployment supplies the
+    # key, always beats a stale file someone left in the working copy.
+    load_dotenv(ENV_FILE)
+
     store = VectorStore()
     generator = generator_from_env()
     app.state.store = store
@@ -207,11 +226,12 @@ def ask(payload: AskRequest, store: StoreDep, generator: GeneratorDep) -> AskRes
         try:
             generated = generator.answer(payload.question, citations)
             answer = AnswerOut(**asdict(generated))
-        except UngroundedCitation as exc:
+        except (UngroundedCitation, TruncatedAnswer) as exc:
             # Serve the passages alone rather than prose citing a source that is not
-            # there. Logged because a rising rate here is a prompt problem, and it is
-            # invisible from the outside -- the response looks like generation is off.
-            log.warning("dropped an answer with an invalid citation: %s", exc)
+            # there, or prose whose qualifying tail was cut off. Logged because a rising
+            # rate here is a prompt or budget problem, and it is invisible from the
+            # outside -- the response looks exactly like generation being off.
+            log.warning("dropped an answer: %s: %s", type(exc).__name__, exc)
 
     return AskResponse(
         question=payload.question,

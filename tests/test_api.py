@@ -33,7 +33,7 @@ from rag_tutoring.api import (
     get_generator,
     get_store,
 )
-from rag_tutoring.generate import Answer, UngroundedCitation
+from rag_tutoring.generate import Answer, TruncatedAnswer, UngroundedCitation
 
 
 def _script_of(page: str) -> str:
@@ -259,15 +259,34 @@ def test_an_ungrounded_answer_is_dropped_and_the_passages_still_serve(
         body = client.post("/ask", json={"question": "what is dropout?"}).json()
     assert body["answer"] is None
     assert len(body["citations"]) == 5
-    assert any("invalid citation" in r.message for r in caplog.records), (
+    assert any("UngroundedCitation" in r.getMessage() for r in caplog.records), (
         "a silently dropped answer looks identical to generation being off"
     )
 
 
+def test_a_truncated_answer_is_dropped_and_the_passages_still_serve(
+    client, store, generator, caplog
+):
+    """The second reason an answer can be dropped, and it must be distinguishable.
+
+    Both failures leave ``answer`` null, so the log line is the only thing that says
+    which happened -- and they need different responses: an ungrounded citation is a
+    prompt problem, a truncation is a budget one. A log that said only "dropped an
+    answer" would make a rising rate uninvestigable.
+    """
+    generator(FakeGenerator(raises=TruncatedAnswer("hit the 2000-token budget")))
+    with caplog.at_level(logging.WARNING):
+        body = client.post("/ask", json={"question": "what is dropout?"}).json()
+    assert body["answer"] is None
+    assert len(body["citations"]) == 5
+    assert any("TruncatedAnswer" in r.getMessage() for r in caplog.records)
+
+
 def test_a_generation_failure_does_not_take_retrieval_down_with_it(client, store, generator):
-    """Only ``UngroundedCitation`` is handled, so this pins the current contract: any
-    other failure propagates. Worth stating explicitly -- an API timeout reaching a
-    student as a 500 is a decision, and this is where to revisit it."""
+    """Only ``UngroundedCitation`` and ``TruncatedAnswer`` are handled, so this pins the
+    current contract: any other failure propagates. Worth stating explicitly -- an API
+    timeout reaching a student as a 500 is a decision, and this is where to revisit
+    it."""
     generator(FakeGenerator(raises=RuntimeError("API unreachable")))
     with pytest.raises(RuntimeError):
         client.post("/ask", json={"question": "what is dropout?"})

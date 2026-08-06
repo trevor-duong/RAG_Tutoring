@@ -84,6 +84,19 @@ notebooks without path hacks.
 Then drop source documents into `data/raw/papers/` and `data/raw/textbooks/`
 (gitignored — the materials stay local).
 
+### Turning generation on
+
+Retrieval needs no key. To also get synthesised answers, copy `.env.example` to
+`.env` and fill in `ANTHROPIC_API_KEY` (from
+[console.anthropic.com](https://console.anthropic.com) — Console billing is
+separate from a Claude.ai subscription). `.env` is gitignored and is read only by
+the two entry points that can need a key: the API's lifespan and
+`run_generation_eval.py`. A real environment variable beats the file, which is how
+a deployment supplies the key — nothing there reads a file.
+
+`GET /health` is the authoritative answer for whether it took: `generation_model`
+is the model name, or `null` when generation is off.
+
 ## Reproducing the index and the numbers
 
 Run in this order from an empty state. Each step's output is what the next one

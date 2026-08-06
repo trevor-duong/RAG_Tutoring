@@ -21,6 +21,11 @@ dependencies = [
     # and an optional extra would add a step that silently yields a deployment serving
     # passages with no answer and no error explaining why.
     "anthropic>=0.40",
+    # Reads a local .env at the two entry points that need a key. A runtime dependency
+    # rather than a dev extra because the API entry point imports it unconditionally;
+    # guarding that import would trade one line for a config path that silently does
+    # nothing on the machine where the extra was not installed.
+    "python-dotenv>=1.0",
 ]
 
 [project.optional-dependencies]

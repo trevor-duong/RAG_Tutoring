@@ -30,9 +30,14 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from rag_tutoring.citations import cite
-from rag_tutoring.config import EMBEDDING_MODEL, GENERATION_TEMPERATURE
+from rag_tutoring.config import EMBEDDING_MODEL
 from rag_tutoring.evaluate import Question, first_hit_rank
-from rag_tutoring.generate import PROMPT_VERSION, Generator, UngroundedCitation
+from rag_tutoring.generate import (
+    PROMPT_VERSION,
+    Generator,
+    TruncatedAnswer,
+    UngroundedCitation,
+)
 
 # Lexical proxy for "the answer signalled that the passages fall short". It is a
 # keyword check, not a judgement: it will miss a hedge phrased differently and can
@@ -75,6 +80,11 @@ class GenerationOutcome:
     retrieval_rank: int | None
     answered: bool
     ungrounded: bool
+    # Recorded rather than inferred afterwards. This run's truncation was first
+    # spotted by checking whether the text ended in terminal punctuation, which
+    # would have missed a cut that happened to land after a full stop -- a check
+    # that can quietly pass. stop_reason cannot.
+    truncated: bool
     n_cited: int
     cited_a_labelled_page: bool
     hedge_phrase_present: bool
@@ -117,6 +127,7 @@ def summarise(outcomes: Sequence[GenerationOutcome]) -> dict:
         "n": n,
         "answered": sum(o.answered for o in outcomes),
         "ungrounded_citations": sum(o.ungrounded for o in outcomes),
+        "truncated": sum(o.truncated for o in outcomes),
         "uncited_answers": sum(o.answered and o.n_cited == 0 for o in outcomes),
         "cited_a_labelled_page": sum(o.cited_a_labelled_page for o in outcomes),
         "hedge_phrase_present": sum(o.hedge_phrase_present for o in outcomes),
@@ -145,7 +156,12 @@ def run(
             "documents_indexed": len(store.sources()),
             "generation_model": generator.model,
             "prompt_version": PROMPT_VERSION,
-            "temperature": GENERATION_TEMPERATURE,
+            # Read off the generator rather than the module constant: --model can point
+            # this run at a model with different sampling support, and provenance that
+            # describes the config instead of the run is provenance that can be wrong.
+            # None records that no sampling parameter was sent -- see
+            # config.GENERATION_TEMPERATURE for what that costs this baseline.
+            "temperature": generator.temperature,
             "k": k,
         }
     )
@@ -163,7 +179,7 @@ def run(
         else:
             partition = "miss"
 
-        answered = ungrounded = False
+        answered = ungrounded = truncated = False
         cited: tuple[int, ...] = ()
         text = ""
         try:
@@ -173,6 +189,11 @@ def run(
             # Counted, not raised: how often the model cites a passage it was not
             # given is one of the things this eval exists to quantify.
             ungrounded = True
+        except TruncatedAnswer:
+            # Same treatment, and for a sharper reason: letting this propagate would
+            # abort the run partway through and throw away every answer already paid
+            # for. A rate is the thing worth having anyway -- see the truncated field.
+            truncated = True
 
         # A lower bound, for the same reason recall is one: relevance judgements are
         # incomplete, so a cited passage that genuinely answers the question but was
@@ -188,6 +209,7 @@ def run(
                 retrieval_rank=rank,
                 answered=answered,
                 ungrounded=ungrounded,
+                truncated=truncated,
                 n_cited=len(cited),
                 cited_a_labelled_page=cited_a_labelled_page,
                 hedge_phrase_present=any(p in text.lower() for p in _HEDGE_PHRASES),
@@ -204,9 +226,13 @@ def format_report(report: GenerationReport) -> str:
     """A report that states its own limits, because the interesting n here is 5."""
     lines = ["Generation eval", "=" * 60, ""]
     p = report.provenance
-    lines.append(
-        f"  {p['generation_model']}  prompt v{p['prompt_version']}  temp {p['temperature']}"
-    )
+    # "temp None" would read as a bug. Spelling it out marks the run as a sample rather
+    # than something a re-run should reproduce exactly.
+    if p["temperature"] is None:
+        temp = "temp unset (model default; run-to-run variance)"
+    else:
+        temp = f"temp {p['temperature']}"
+    lines.append(f"  {p['generation_model']}  prompt v{p['prompt_version']}  {temp}")
     lines.append(
         f"  over {p['documents_indexed']} documents / {p['chunks_indexed']:,} chunks, k={p['k']}"
     )
@@ -214,7 +240,7 @@ def format_report(report: GenerationReport) -> str:
 
     header = (
         f"  {'partition':<10} {'n':>3} {'answered':>9} {'uncited':>8}"
-        f" {'ungrounded':>11} {'cited-label':>12} {'hedged*':>8}"
+        f" {'ungrounded':>11} {'truncated':>10} {'cited-label':>12} {'hedged*':>8}"
     )
     lines += [header, "  " + "-" * (len(header) - 2)]
     for name in PARTITIONS:
@@ -223,8 +249,8 @@ def format_report(report: GenerationReport) -> str:
             continue
         lines.append(
             f"  {name:<10} {s['n']:>3} {s['answered']:>9} {s['uncited_answers']:>8}"
-            f" {s['ungrounded_citations']:>11} {s['cited_a_labelled_page']:>12}"
-            f" {s['hedge_phrase_present']:>8}"
+            f" {s['ungrounded_citations']:>11} {s['truncated']:>10}"
+            f" {s['cited_a_labelled_page']:>12} {s['hedge_phrase_present']:>8}"
         )
 
     lines += [
