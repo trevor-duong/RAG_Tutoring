@@ -27,15 +27,33 @@ A single-page frontend at `/` consumes that API. Next: deploy, then 2–3 real
 students. Retrieval improvements are deliberately deferred and written up as
 experiments to run against this frozen baseline, not done now.
 
-### The API retrieves; it does not answer
+### The answer never replaces the sources
 
-`POST /ask` returns the passages that best match a question, each cited, and
-leaves the reading to the student. There is no generation step, on purpose: a
-correct page is in the top 5 half the time but is the *top* hit only 19% of the
-time, so synthesising one confident answer from the top hits would turn a
-retrieval miss into fluent prose a student cannot audit. Showing five sources
-with their scores puts the judgement where the evidence supports it. Generation,
-when it comes, consumes this same response.
+`POST /ask` returns a short answer *and* the passages it was written from, and the
+page renders the passages underneath it. That shape is the design, and it comes
+out of the baseline: a correct page is in the top 5 half the time but is the *top*
+hit only 19% of the time, so an answer synthesised from these passages is
+sometimes synthesised from the wrong ones. Returning the sources is what makes
+that visible to a student rather than hidden behind fluent prose — answer-only is
+the one variant the evidence does not support.
+
+Two rules are enforced rather than hoped for:
+
+- **Citations are validated, not just requested.** The model cites `[source N]`
+  into the passage set it was handed, and every marker is checked against that set
+  before the response leaves the server. If one doesn't resolve, the answer is
+  dropped and the passages serve alone. Prompting for citations and trusting the
+  output would be a check that cannot fail.
+- **The model does not abstain, and does not invent.** Thin passages produce an
+  answer that says what they do and don't cover plus the closest thing they
+  genuinely say. "Always answer" must not decay into "answer from pretraining" — a
+  hedged sentence sourced from the model's own memory is a confabulation wearing a
+  disclaimer, and a student can't tell the difference.
+
+Generation is **optional and off by default**. With no `ANTHROPIC_API_KEY` the API
+serves passages alone, which is a working product rather than a degraded one; it
+is exactly what this served before generation existed. That is also what keeps the
+whole test suite runnable with no index, no embedding model, and no key.
 
 ## Roadmap
 
@@ -91,6 +109,35 @@ circular:
 python scripts/find_passage.py "internal covariate shift" --source "Batch Norm"
 ```
 
+### Scoring generation
+
+Separate instrument, separate baseline. `eval/baseline.json` stays frozen so
+retrieval changes remain comparable to every earlier run; generation writes to
+`eval/generation-baseline.json`.
+
+```bash
+python scripts/run_generation_eval.py \
+  --save eval/generation-baseline.json \
+  --answers eval/generation-answers.jsonl
+```
+
+It scores the two partitions that carry the risk, and neither needs new labelling
+because the existing labels already define them:
+
+- **The ~16 misses.** recall@5 = 0.50, so about half the questions hand the model
+  five passages containing no correct page. What it does there is the whole risk.
+- **The 5 negatives.** The corpus can't answer these. A similarity threshold
+  provably can't separate them from answerable questions — the score ranges
+  overlap — but a model *reading* five passages is a different mechanism, so it can
+  succeed where a scalar cutoff couldn't.
+
+What the report measures is mechanical: does the answer cite, what does it cite,
+does every citation resolve. Whether an answer is *faithful* needs a judge or a
+human, so the ~21 misses and negatives get dumped for reading — at that size,
+reading them is more honest than a proxy. `--save` writes metadata only; answer
+text goes to the gitignored `--answers` file, because an answer may quote its
+passages and `eval/baseline.json` carries no chunk text for the same reason.
+
 ## Running the API
 
 Needs an index already built (the sequence above).
@@ -131,10 +178,16 @@ a server-side guard. Styling is lifted from
 [trevor-duong.github.io](https://trevor-duong.github.io) so the two read as one
 portfolio.
 
-Two frontend rules are pinned by tests, because both fail silently in a browser
-where no Python test would see them: the page renders the server's `page_label`
-verbatim and never composes a reference from the raw index, and it references only
-routes this app actually registers.
+Three frontend rules are pinned by tests, because all three fail silently in a
+browser where no Python test would see them: the page renders the server's
+`page_label` verbatim and never composes a reference from the raw index; it
+references only routes this app actually registers; and it agrees with the server on
+the `[source N]` citation marker, so a format change on one side can't turn every
+citation into literal text sitting in the prose.
+
+That marker format was measured, not picked. Bare `[N]` appears 1,342 times across
+11.6% of the corpus's pages — papers cite by number — so validating a bare marker
+would collide with the corpus's own references. `[source N]` appears zero times.
 
 ## Development
 
@@ -155,7 +208,7 @@ pytest
 ## Layout
 
 ```
-src/rag_tutoring/    Library code: ingest, store, evaluate, citations, api.
+src/rag_tutoring/    Library code: ingest, store, evaluate, citations, generate, api.
 src/rag_tutoring/static/  The one page the API serves.
 notebooks/           Phase 1 exploration.
 scripts/             Rebuild the index, audit it, find passages, run the eval.

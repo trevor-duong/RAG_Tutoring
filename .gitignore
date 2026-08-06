@@ -33,5 +33,10 @@ chroma/
 # Personal interview-prep notes, not part of the codebase
 docs/interview-prep/
 
+# Generated answer text from the generation eval. The metrics in
+# eval/generation-baseline.json are committed; the prose is not, because an answer
+# may quote its passages — the same reason eval/baseline.json carries no chunk text.
+eval/generation-answers.jsonl
+
 # macOS
 .DS_Store

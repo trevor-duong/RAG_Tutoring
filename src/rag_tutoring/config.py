@@ -52,3 +52,19 @@ MODEL_MAX_TOKENS = 256
 # the [CLS]/[SEP] the tokenizer adds, plus margin.
 CHUNK_MAX_TOKENS = 240
 CHUNK_OVERLAP_TOKENS = 60
+
+# Generation model, used to synthesise an answer from retrieved passages. Changing
+# this changes what `eval/generation-baseline.json` is comparable to -- the same rule
+# as EMBEDDING_MODEL, for the same reason. Unlike the embedding model it forces no
+# re-index: generation reads the passages retrieval already found, so a model swap is
+# a re-run of the generation eval, not a rebuild.
+GENERATION_MODEL = "claude-sonnet-5"
+
+# Temperature 0 so a stored eval result is reproducible. Sampling would make a
+# baseline that shifts under re-runs, and then a prompt change and noise would be
+# indistinguishable -- the same reason the index is rebuilt rather than appended.
+GENERATION_TEMPERATURE = 0.0
+
+# Answers orient a student toward passages shown directly beneath them; they are not
+# the deliverable on their own, so this is deliberately tight.
+GENERATION_MAX_TOKENS = 700

@@ -85,14 +85,45 @@
 
     main { flex: 1; padding: 2rem 0 3rem; }
 
-    /* The no-generation stance, kept above the results rather than in the footer:
-       a student reads top-down and stops at the first thing that looks like an
-       answer, so the caveat has to arrive before the passages do. */
+    /* The caveat, kept above the results rather than in the footer: a student reads
+       top-down and stops at the first thing that looks like an answer, so it has to
+       arrive before the answer does. */
     .lede {
       margin: 1.5rem 0 0;
       padding-left: 0.9rem;
       border-left: 3px solid var(--rule);
       font-size: 0.9rem;
+    }
+
+    /* The answer sits above the passages and is visually subordinate to nothing --
+       but the passages are never hidden behind it, which is the whole design. */
+    #answer {
+      margin: 1.75rem 0 0;
+      padding: 1.1rem 1.25rem;
+      background: #f7f8f9;
+      border-left: 3px solid var(--accent);
+      border-radius: 0 10px 10px 0;
+      color: var(--heading);
+    }
+    #answer:empty { display: none; }
+    #answer p { margin: 0; }
+
+    /* Citation markers, rendered as superscript numbers rather than left as literal
+       "[source 3]" in the prose. Each one is validated server-side against the
+       passages in the same response, so the number always names something below. */
+    .ref {
+      font-size: 0.7em;
+      font-weight: 600;
+      color: var(--accent);
+      padding: 0 0.1em;
+      vertical-align: super;
+      line-height: 0;
+    }
+
+    .answer-note {
+      margin: 0.75rem 0 0 !important;
+      font-size: 0.78rem;
+      color: var(--sec);
     }
 
     form {
@@ -196,8 +227,9 @@
   <header class="masthead">
     <div class="container">
       <h1>RAG Tutoring</h1>
-      <p>Search my deep learning tutoring materials. Ask a question and get the
-         passages that match it, cited so you can go read the source.</p>
+      <p>Ask a question about deep learning and get an answer written from my
+         tutoring materials &mdash; with the passages it came from, so you can go
+         read the source yourself.</p>
     </div>
   </header>
 
@@ -212,10 +244,12 @@
       <button id="submit" type="submit">Ask</button>
     </form>
 
-    <p class="lede">This finds passages; it does not write an answer. You get five
-       sources, closest match first &mdash; and the right page is in the top five
-       about half the time, so scan all five rather than trusting the first.</p>
+    <p class="lede">Answers are written only from the five passages below them, and
+       every citation links to one of them &mdash; so check it against the sources.
+       The right page is in the top five about half the time, which means the answer
+       is sometimes built from passages that don't actually cover your question.</p>
 
+    <div id="answer"></div>
     <p id="status"></p>
     <div id="results"></div>
   </main>
@@ -236,6 +270,7 @@
     const button = document.getElementById("submit");
     const status = document.getElementById("status");
     const results = document.getElementById("results");
+    const answerBox = document.getElementById("answer");
 
     function setStatus(message) {
       status.textContent = message;
@@ -243,6 +278,38 @@
 
     function clearResults() {
       results.replaceChildren();
+      answerBox.replaceChildren();
+    }
+
+    // "[source 3]" becomes a superscript 3. Built out of text nodes and elements
+    // rather than assembled as an HTML string, so model output is never parsed as
+    // markup -- the same reason every other value here goes through textContent.
+    const MARKER = /\[source (\d{1,2})\]/gi;
+
+    function renderAnswer(answer) {
+      if (!answer) return;
+
+      const paragraph = document.createElement("p");
+      let last = 0;
+      for (const match of answer.text.matchAll(MARKER)) {
+        paragraph.append(answer.text.slice(last, match.index));
+        const ref = document.createElement("sup");
+        ref.className = "ref";
+        ref.textContent = match[1];
+        // The server validated this number against the passages in this same
+        // response, so it always names one of the sources rendered below.
+        ref.title = "source " + match[1] + ", listed below";
+        paragraph.append(ref);
+        last = match.index + match[0].length;
+      }
+      paragraph.append(answer.text.slice(last));
+
+      const note = document.createElement("p");
+      note.className = "answer-note";
+      note.textContent = "Written from the passages below by " + answer.model +
+        ". Check it against them.";
+
+      answerBox.replaceChildren(paragraph, note);
     }
 
     // Every value below is written with textContent. Snippets are text extracted
@@ -319,6 +386,7 @@
         // Nothing to announce on success: the passages are their own evidence,
         // and the standing note above them already says how to read the order.
         setStatus("");
+        renderAnswer(data.answer);
         render(data.citations);
       } catch {
         setStatus("Could not reach the server.");
@@ -332,10 +400,15 @@
     (async () => {
       try {
         const info = await (await fetch("/health")).json();
-        document.getElementById("index-info").textContent =
-          info.documents_indexed + " documents · " +
-          info.chunks_indexed.toLocaleString() + " chunks · " +
-          info.embedding_model;
+        const parts = [
+          info.documents_indexed + " documents",
+          info.chunks_indexed.toLocaleString() + " chunks",
+          info.embedding_model,
+        ];
+        // Omitted rather than shown as "none" when generation is off: the absence of
+        // an answer is already visible, and a null model name is not information.
+        if (info.generation_model) parts.push("answers by " + info.generation_model);
+        document.getElementById("index-info").textContent = parts.join(" · ");
       } catch {
         // The footer line is provenance, not function. Failing to load it must
         // not put an error in front of a student whose search worked.

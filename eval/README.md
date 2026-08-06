@@ -161,6 +161,16 @@ nice-to-have.
 - `baseline.json` — a saved report to compare future runs against. Scores and
   citations only, no retrieved text (which would carry both copyrighted material
   and, before redaction, an email address).
+- `generation-baseline.json` — a **separate** instrument, written by
+  `run_generation_eval.py`. It scores what the model does with these passages, over
+  the same question set: mainly the ~16 questions where retrieval put no correct page
+  in the top 5, and the 5 negatives. Kept in its own file so a generation change
+  cannot move the numbers above; `baseline.json` stays frozen.
+- `generation-answers.jsonl` — answer prose, **gitignored**. Answers may quote their
+  passages, so the same rule that keeps retrieved text out of `baseline.json` keeps it
+  out of git here. This is the file to actually read: the mechanical rates say whether
+  citations resolve, not whether an answer is any good.
 
 Regenerate both the index and the numbers with the sequence in the top-level
-README: `build_index.py` → `audit_corpus.py` → `run_eval.py`.
+README: `build_index.py` → `audit_corpus.py` → `run_eval.py`, then
+`run_generation_eval.py` for the generation side.

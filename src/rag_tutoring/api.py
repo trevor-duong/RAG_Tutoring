@@ -1,14 +1,21 @@
-"""HTTP surface over retrieval: ask a question, get cited passages back.
+"""HTTP surface over retrieval: ask a question, get an answer *and* its sources.
 
-**This endpoint retrieves; it does not answer.** It returns the passages that
-best match the question, each with a citation, and leaves the reading to the
-student. That is a deliberate stopping point, not an unfinished one: at the
-current baseline a correct page is in the top 5 half the time but is the *top*
-hit only 19% of the time (see ``eval/README.md``), so synthesising one confident
-answer from the top hits would launder a retrieval miss into fluent prose a
-student has no way to audit. Showing five sources and their scores puts the
-judgement where the evidence supports it. A generation step, when it comes,
-consumes this same response and needs nothing here to change.
+**The answer never replaces the passages.** Both are returned, and the page renders
+the passages underneath the answer. That shape is the design, and it comes straight
+out of the baseline: a correct page is in the top 5 half the time but is the *top* hit
+only 19% of the time (see ``eval/README.md``), so an answer synthesised from these
+passages is sometimes synthesised from the wrong ones. Returning the sources it was
+built from is what makes that visible to a student instead of hidden behind fluent
+prose. Answer-only would be the one variant the evidence does not support.
+
+Generation is **optional and off by default**. With no ``ANTHROPIC_API_KEY`` the
+endpoint serves passages alone, which is a working product rather than a degraded one
+-- it is exactly what this served before ``generate.py`` existed. That is also what
+keeps the test suite free of a key, and the whole suite runs with no index, no
+embedding model and no API key.
+
+If the model cites a passage it was not given, the answer is dropped and the passages
+are served alone. See ``generate.UngroundedCitation`` for why that is not repaired.
 
 Run it with::
 
@@ -19,6 +26,7 @@ That serves the JSON API and, at ``/``, the one static page that consumes it.
 
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 from pathlib import Path
@@ -30,7 +38,10 @@ from pydantic import BaseModel, Field
 
 from rag_tutoring.citations import cite
 from rag_tutoring.config import CHUNK_MAX_TOKENS, CHUNK_OVERLAP_TOKENS, EMBEDDING_MODEL
+from rag_tutoring.generate import Generator, UngroundedCitation, generator_from_env
 from rag_tutoring.store import VectorStore
+
+log = logging.getLogger(__name__)
 
 MAX_K = 20
 
@@ -64,8 +75,27 @@ class CitationOut(BaseModel):
     snippet: str
 
 
+class AnswerOut(BaseModel):
+    """The synthesised answer, and which passages it claims to rest on.
+
+    ``cited`` is 1-based into ``AskResponse.citations`` and is already validated --
+    every number in it names a passage in the same response. A client can render the
+    markers as links without re-checking, which is the point of validating server-side
+    rather than asking the page to be careful.
+    """
+
+    text: str
+    cited: list[int]
+    model: str
+    prompt_version: str
+
+
 class AskResponse(BaseModel):
+    """Answer plus sources. ``answer`` is ``None`` when generation is off or when its
+    citations failed validation; the passages are always present either way."""
+
     question: str
+    answer: AnswerOut | None
     citations: list[CitationOut]
 
 
@@ -83,6 +113,10 @@ class IndexInfo(BaseModel):
     collection: str
     chunks_indexed: int
     documents_indexed: int
+    # None when no key is configured. Reported because "did this answer come from a
+    # model, and which one?" is not something a student or a saved transcript should
+    # have to infer from whether prose happens to be present.
+    generation_model: str | None
 
 
 @asynccontextmanager
@@ -101,7 +135,9 @@ async def lifespan(app: FastAPI):
     properly is the same cache-invalidation question Phase 4 takes up.
     """
     store = VectorStore()
+    generator = generator_from_env()
     app.state.store = store
+    app.state.generator = generator
     app.state.index_info = IndexInfo(
         embedding_model=EMBEDDING_MODEL,
         chunk_max_tokens=CHUNK_MAX_TOKENS,
@@ -109,9 +145,18 @@ async def lifespan(app: FastAPI):
         collection=store.collection_name,
         chunks_indexed=store.count(),
         documents_indexed=len(store.sources()),
+        generation_model=generator.model if generator else None,
     )
+    if generator is None:
+        # WARNING rather than INFO on purpose: uvicorn's default log config does not
+        # enable INFO for module loggers, so an info-level line here would never be
+        # printed -- a startup notice that cannot appear is no notice at all. Only the
+        # surprising state is logged; ``/health`` is the authoritative answer for both,
+        # and it does not depend on how logging happens to be configured.
+        log.warning("generation is off: ANTHROPIC_API_KEY is not set; serving passages only")
     yield
     app.state.store = None
+    app.state.generator = None
 
 
 app = FastAPI(
@@ -131,21 +176,47 @@ def get_store(request: Request) -> VectorStore:
     return request.app.state.store
 
 
+def get_generator(request: Request) -> Generator | None:
+    """Hand the request the process-wide generator, or ``None`` if generation is off.
+
+    A dependency for the same reason the store is one: a test overrides it with a stub
+    and never needs a key. ``None`` is a legitimate value here, not a missing
+    dependency -- see the module docstring.
+    """
+    return getattr(request.app.state, "generator", None)
+
+
 StoreDep = Annotated[VectorStore, Depends(get_store)]
+GeneratorDep = Annotated["Generator | None", Depends(get_generator)]
 
 
 @app.post("/ask", response_model=AskResponse)
-def ask(payload: AskRequest, store: StoreDep) -> AskResponse:
-    """Return the passages most relevant to ``question``, best first.
+def ask(payload: AskRequest, store: StoreDep, generator: GeneratorDep) -> AskResponse:
+    """Answer ``question`` from the passages most relevant to it, best first.
 
-    Responses carry verbatim source text, which is copyrighted material, so
-    nothing here logs a response body -- the same reason ``eval/baseline.json``
-    stores scores and citations but never the retrieved passage.
+    Responses carry verbatim source text, so nothing here logs a response body -- the
+    same reason ``eval/baseline.json`` stores scores and citations but never the
+    retrieved passage. The ungrounded-citation warning below is deliberately built
+    from counts only, so it stays loggable.
     """
     hits = store.query(payload.question, k=payload.k)
+    citations = [cite(h) for h in hits]
+
+    answer = None
+    if generator is not None and citations:
+        try:
+            generated = generator.answer(payload.question, citations)
+            answer = AnswerOut(**asdict(generated))
+        except UngroundedCitation as exc:
+            # Serve the passages alone rather than prose citing a source that is not
+            # there. Logged because a rising rate here is a prompt problem, and it is
+            # invisible from the outside -- the response looks like generation is off.
+            log.warning("dropped an answer with an invalid citation: %s", exc)
+
     return AskResponse(
         question=payload.question,
-        citations=[CitationOut(**asdict(cite(h))) for h in hits],
+        answer=answer,
+        citations=[CitationOut(**asdict(c)) for c in citations],
     )
 
 

@@ -16,6 +16,11 @@ dependencies = [
     "transformers>=4.40",
     "fastapi>=0.115",
     "uvicorn>=0.30",
+    # Generation. A hard dependency even though generation is optional at runtime:
+    # `generate.py` imports it lazily, so the tests and a key-less run never touch it,
+    # and an optional extra would add a step that silently yields a deployment serving
+    # passages with no answer and no error explaining why.
+    "anthropic>=0.40",
 ]
 
 [project.optional-dependencies]
