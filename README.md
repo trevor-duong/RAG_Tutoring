@@ -24,8 +24,29 @@ score broken out by how the question is phrased. See `eval/README.md` for what
 the numbers do and do not support.
 
 A single-page frontend at `/` consumes that API. Next: deploy, then 2–3 real
-students. Retrieval improvements are deliberately deferred and written up as
-experiments to run against this frozen baseline, not done now.
+students. Retrieval improvements are otherwise deferred and written up as
+experiments to run against this baseline rather than done now — one has been run
+so far, described below.
+
+### Reference lists do not compete with explanations
+
+8.5% of the corpus is a document's *apparatus* rather than its exposition:
+bibliographies, acknowledgments, contents pages. It chunks and embeds like prose
+and competes for the five slots a student sees. `structure.py` classifies it and
+`VectorStore.query` excludes it by default.
+
+The classification is per *chunk*, never per page, and that distinction is the
+whole design. Page 14 of the Lottery Ticket paper is its acknowledgments page —
+and it also holds four chunks of appendix prose, one of which is the top hit for
+a real question about overfitting. Filtering the page would have deleted the
+answer in order to remove the apparatus.
+
+Chunks are flagged and filtered at query time rather than dropped at ingest, so
+both arms of the comparison come from one index — `run_eval.py
+--include-structural` reproduces the pre-filter numbers exactly, from the same
+embeddings. On this corpus the filter moved recall@10 from 0.69 to 0.72 and MRR
+from 0.319 to 0.323; the honest summary is that it fixed the top-5 for two
+questions and rescued one from a total miss. `eval/README.md` names them.
 
 ### The answer never replaces the sources
 
@@ -105,6 +126,7 @@ reads, so a partial run is visible rather than silent.
 ```bash
 python scripts/build_index.py     # ~14 min: extract, chunk, embed, index all documents
 python scripts/audit_corpus.py    # verify nothing was silently corrupted or dropped
+python scripts/audit_structure.py # verify the structural filter is not eating content
 python scripts/run_eval.py --save eval/baseline.json
 ```
 
@@ -113,6 +135,12 @@ index only ever contains chunks from the current chunk setting — which is what
 makes `eval/baseline.json` mean something. It also caches extracted page text to
 `data/processed/pages.jsonl`, because extraction dominates the runtime; the audit
 and `scripts/find_passage.py` read that cache instead of paying for it again.
+
+For a change that alters chunking or chunk metadata but not extraction,
+`build_index.py --from-cache` re-chunks that cache instead — 71 seconds rather
+than 14 minutes. It is only valid while `ingest.load_pdf` is unchanged, and the
+guard is downstream rather than in the script: an unchanged setting has to
+reproduce the saved baseline exactly, and a stale cache would not.
 
 `find_passage.py` does a lexical search over the corpus and is how eval ground
 truth gets located — never with the retriever, which would make the eval
@@ -124,9 +152,16 @@ python scripts/find_passage.py "internal covariate shift" --source "Batch Norm"
 
 ### Scoring generation
 
-Separate instrument, separate baseline. `eval/baseline.json` stays frozen so
-retrieval changes remain comparable to every earlier run; generation writes to
-`eval/generation-baseline.json`.
+Separate instrument, separate baseline: generation writes to
+`eval/generation-baseline.json`, so a prompt change cannot move a retrieval number.
+
+`eval/baseline.json` tracks the production config rather than staying frozen, and
+its `provenance` records which arm produced it — two reports with the same chunk
+count can still describe different candidate sets. What makes overwriting it safe
+is that the earlier arm is *reproducible* rather than merely preserved:
+`run_eval.py --include-structural` regenerates the pre-filter numbers from the
+same embeddings, which is a stronger guarantee than a stale file, since a file
+cannot be re-derived after the index moves on.
 
 ```bash
 python scripts/run_generation_eval.py \

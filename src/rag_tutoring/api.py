@@ -125,6 +125,13 @@ class IndexInfo(BaseModel):
     chunk_overlap_tokens: int
     collection: str
     chunks_indexed: int
+    # How many of those a question can actually reach. The two differ because a
+    # document's apparatus -- reference lists, acknowledgments, contents pages -- is
+    # indexed and then excluded at query time. Reporting only the total would state
+    # that 9,169 chunks are searchable while 782 of them are unreachable, which is
+    # the same class of untruth as a config documenting a mechanism that is not wired
+    # up: it reads as fact and nothing contradicts it.
+    chunks_retrievable: int
     documents_indexed: int
     # None when no key is configured. Reported because "did this answer come from a
     # model, and which one?" is not something a student or a saved transcript should
@@ -163,6 +170,7 @@ async def lifespan(app: FastAPI):
         chunk_overlap_tokens=CHUNK_OVERLAP_TOKENS,
         collection=store.collection_name,
         chunks_indexed=store.count(),
+        chunks_retrievable=store.count(include_structural=False),
         documents_indexed=len(store.sources()),
         generation_model=generator.model if generator else None,
     )

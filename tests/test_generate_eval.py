@@ -46,8 +46,10 @@ class FakeStore:
             for i, (source, page) in enumerate(self.hits[:k])
         ]
 
-    def count(self) -> int:
-        return 9169
+    def count(self, include_structural: bool = True) -> int:
+        # Two different numbers, so a caller that ignores the argument and reports the
+        # total as "searchable" is visible here rather than only in a live report.
+        return 9169 if include_structural else 8387
 
     def sources(self) -> list[str]:
         return ["Dropout", "GloVe"]

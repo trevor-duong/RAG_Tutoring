@@ -26,6 +26,10 @@ class Retrieved:
     source_type: str
     page: int
     score: float  # cosine similarity in [0, 1]; higher is more relevant
+    # Whether this chunk is a document's apparatus rather than its exposition. Only
+    # ever True when a caller asked for structural chunks; the default query path
+    # excludes them. Carried so the eval can count how many top-k slots they take.
+    structural: bool = False
 
 
 class VectorStore:
@@ -141,14 +145,32 @@ class VectorStore:
                 embeddings=self._embed([c.text for c in batch]),
                 documents=[c.text for c in batch],
                 metadatas=[
-                    {"source": c.source, "source_type": c.source_type, "page": c.page}
+                    {
+                        "source": c.source,
+                        "source_type": c.source_type,
+                        "page": c.page,
+                        "structural": c.structural,
+                    }
                     for c in batch
                 ],
             )
 
-    def query(self, text: str, k: int = 5) -> list[Retrieved]:
-        """Return the ``k`` chunks most similar to ``text``, best first."""
-        res = self.collection.query(query_embeddings=self._embed([text]), n_results=k)
+    def query(self, text: str, k: int = 5, include_structural: bool = False) -> list[Retrieved]:
+        """Return the ``k`` chunks most similar to ``text``, best first.
+
+        Reference lists, acknowledgments and contents pages are excluded **by
+        default**, so no caller has to remember to ask for the filter and forgetting
+        cannot quietly ship boilerplate to a student. ``include_structural=True``
+        exists for the eval, which needs an unfiltered arm to measure the filter
+        against, and for auditing what is being held back.
+
+        Filtering happens in the store rather than after the fact because a
+        post-filter would silently return fewer than ``k`` results -- on questions the
+        corpus cannot answer, which is exactly where the boilerplate wins, that could
+        be most of them.
+        """
+        where = None if include_structural else {"structural": False}
+        res = self.collection.query(query_embeddings=self._embed([text]), n_results=k, where=where)
         return [
             Retrieved(
                 text=doc,
@@ -156,15 +178,24 @@ class VectorStore:
                 source_type=meta["source_type"],
                 page=int(meta["page"]),
                 score=1.0 - dist,  # cosine distance -> similarity
+                structural=bool(meta.get("structural", False)),
             )
             for doc, meta, dist in zip(
                 res["documents"][0], res["metadatas"][0], res["distances"][0], strict=True
             )
         ]
 
-    def count(self) -> int:
-        """Number of chunks currently indexed."""
-        return self.collection.count()
+    def count(self, include_structural: bool = True) -> int:
+        """Number of chunks indexed; by default every one, filtered or not.
+
+        The default counts everything because that is what "the index holds N chunks"
+        means to a reader of an eval report. Pass ``False`` for the retrievable
+        subset -- the two together are what makes a report's provenance say which arm
+        produced it.
+        """
+        if include_structural:
+            return self.collection.count()
+        return len(self.collection.get(where={"structural": False}, include=[])["ids"])
 
     def sources(self) -> set[str]:
         """Documents that actually have chunks in the index.
@@ -177,14 +208,22 @@ class VectorStore:
         got = self.collection.get(include=["metadatas"])
         return {str(m["source"]) for m in got["metadatas"]}
 
-    def pages_present(self, source: str) -> set[int]:
-        """Pages of ``source`` that have at least one chunk indexed.
+    def pages_present(self, source: str, include_structural: bool = False) -> set[int]:
+        """Pages of ``source`` with at least one chunk that a query could return.
 
         Exists for the eval harness to check its own ground truth: a label
         naming a page that was never indexed -- a typo, or a page whose text
         would not extract -- can never be retrieved, so it scores as a miss that
         looks like poor retrieval. Same shape of bug as the silent truncation:
         the number comes out wrong and nothing complains.
+
+        Structural chunks are excluded for that same reason, and it is the point of
+        the default: a labelled page whose every chunk was filtered is just as
+        unreachable as one that was never indexed, so it has to fail the same check
+        rather than quietly become a miss.
         """
-        got = self.collection.get(where={"source": source}, include=["metadatas"])
+        where: dict = {"source": source}
+        if not include_structural:
+            where = {"$and": [where, {"structural": False}]}
+        got = self.collection.get(where=where, include=["metadatas"])
         return {int(m["page"]) for m in got["metadatas"]}

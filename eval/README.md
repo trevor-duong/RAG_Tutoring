@@ -110,10 +110,19 @@ things the breakdown shows that the aggregate hides:
   "students phrase things badly" — it is that retrieval matches surface framing,
   whichever direction that cuts.
 - **Non-content pages compete with content.** The top hit for "training loss down,
-  validation error up" is the *acknowledgments section* of the Lottery Ticket
-  paper at 0.498 — above the lowest score of any question that did retrieve a
-  correct source. Acknowledgments, reference lists, tables of contents and title
-  pages are all chunked and indexed like prose.
+  validation error up" is page 14 of the Lottery Ticket paper at 0.498 — above the
+  lowest score of any question that did retrieve a correct source. Acknowledgments,
+  reference lists, tables of contents and title pages are all chunked and indexed
+  like prose.
+
+  **Corrected 2026-08-10.** This entry originally called that hit "the
+  acknowledgments section", because page 14 *is* the acknowledgments page and this
+  report identifies hits by page. At chunk level it is not: page 14 holds five
+  chunks, and the one that scored 0.498 is appendix prose about validation loss
+  rising as a model overfits — a defensible hit from an unlabelled document. The
+  finding survives (see the four verified cases in the filter section below); the
+  example was wrong, and the reason it was wrong is exactly why the filter that
+  came out of it classifies chunks and not pages.
 - **A similarity threshold cannot detect out-of-corpus questions here.** The two
   score distributions overlap: the 16 questions that retrieved a correct source in
   the top 5 span 0.476–0.766, the 5 unanswerable ones 0.421–0.600. No cutoff
@@ -149,31 +158,122 @@ scoring *higher*. The changed chunks are title pages, and stripping a block of
 email garbage out of a page that is otherwise title-plus-abstract makes it a
 better match for almost any on-topic query. `Attention Is All You Need` p1 now
 appears at rank 9 for a question about alignment models. In other words the
-privacy fix made non-content pages *more* competitive — the same finding as the
-acknowledgments hit, arriving from the other direction, and the reason a
-structural filter at ingest is the next retrieval experiment rather than a
-nice-to-have.
+privacy fix made non-content pages *more* competitive — the same finding arriving
+from the other direction, and the reason a structural filter was the next
+retrieval experiment rather than a nice-to-have.
 
-## Generation baseline (2026-08-05)
+## Structural filter (2026-08-10)
 
-First run of the second instrument, `claude-sonnet-5` at k=5 over the same 37
-questions:
+Reference lists, acknowledgments and contents pages are 8.5% of the corpus (782 of
+9,169 chunks) and are now excluded from retrieval by default. Same index, same
+embeddings, filtered at query time — so the pre-filter arm is a flag away rather
+than a rebuild:
+
+```bash
+python scripts/run_eval.py                        # 8,387 chunks searchable
+python scripts/run_eval.py --include-structural   # all 9,169
+```
+
+| | recall@1 | recall@3 | recall@5 | recall@10 | MRR |
+| --- | --- | --- | --- | --- | --- |
+| all 32, filtered | 0.19 | 0.41 | 0.50 | **0.72** | **0.323** |
+| all 32, unfiltered | 0.19 | 0.41 | 0.50 | 0.69 | 0.319 |
+
+**The unfiltered arm reproduces the 07-30 baseline to the digit** — every rate,
+every per-question rank, every top-1 score. That is what makes the comparison mean
+anything: the index was rebuilt, and the check proves the rebuild changed nothing
+except the flag.
+
+**Three questions moved, and naming them is the honest report.** n=32, so one
+question is 0.031 of recall and a rate hides how little happened:
+
+- `attention-alignment` — **miss → rank 10**. Four of its top ten were apparatus:
+  two reference-list chunks, a third from another paper, and the *Attention Is All
+  You Need* title page. Removing three of them let a labelled page in.
+- `momentum-method` — rank 5 → 4, a reference-list chunk cleared out from above it.
+- `neg-moe` — top-1 fell from 0.536 to 0.477. The 0.536 was a bibliography entry:
+  the corpus mentions mixture-of-experts *only* in reference lists, so retrieval had
+  been matching the title of a paper nobody here explains. This is the case the
+  filter exists for and it moves no rate at all, because the question has no
+  labelled page to hit.
+
+**Recall was never the right instrument for this.** A boilerplate chunk crowding
+out a fourth good passage changes no rate, and on the five negatives there is no
+rate to change. So the report counts slots instead: before the filter, **11 of 185
+top-5 slots on 7 of 37 questions** were apparatus, including 3 of 5 for both
+`neg-moe` and `neg-distillation`. After, zero by construction.
+
+**Abstention separated slightly better, and it is still not separable.** The
+negatives' median top-1 fell 0.536 → 0.509 while the answered questions' band held
+at 0.476–0.766, so a 0.50 cutoff now refuses 2 of 5 negatives instead of 1, at the
+same cost of 2 of 16. The distributions still overlap. The 07-30 conclusion stands:
+abstention needs something other than raw top-1 similarity.
+
+### What the filter is allowed to break, and how that is checked
+
+A false positive deletes a real explanation, and the retrieval eval **cannot see
+it** — it checks 32 labelled pages, so content lost on any of the other 2,600 is
+invisible. `scripts/audit_structure.py` is the check that can:
+
+- **Flagged fraction per document.** A rule misfiring on one document's formatting
+  shows up as that document sitting far above the rest. Papers land at 6–22%,
+  *Dive into Deep Learning* at 5.7%, Nielsen at 0.7%, StatQuest at 0.3% — the shape
+  you would predict, since a paper's bibliography is a real fraction of its pages
+  and a textbook's is not. The one document above 30% is the RAG paper at 40.7%,
+  and it is genuine: pages 10–16 of 16 are references and appendix.
+- **Labelled pages losing every chunk.** Zero, and the script exits non-zero on any.
+- **Reading the flags.** All 14 short-chunk flags were read individually; all 14 are
+  reference tails, footnote-URL lists or a title page.
+
+Three rules were cut or tightened *because* of that audit, and each is now a test:
+a copyright/licence rule that fired four times and was wrong twice (LoRA's appendix
+describing which licence each dataset is released under is content); a
+case-insensitive acknowledgments heading that matched "we acknowledge" in the RAG
+paper's broader-impacts prose; and dot-leader detection that matched the ellipses
+in BERT's Figure 3.
+
+Two known gaps are left standing rather than closed by tightening until they went
+away. The *Attention Is All You Need* title page still ranks for alignment
+questions: its chunk carries Google's permission notice *and* the title, authors
+and first sentence of the abstract, so flagging it would delete abstract text.
+And one 89-word reference chunk scores 0.189 function-word density against a 0.18
+threshold — a near miss that stays indexed, because moving the threshold to catch
+it would leave a 0.02 margin on real related-work prose.
+
+## Generation baseline (2026-08-10, filtered index)
+
+The second instrument, `claude-sonnet-5` at k=5 over the same 37 questions. Re-run
+after the structural filter, because a change in which chunks are searchable changes
+what generation is scored on without a line of the prompt moving:
 
 | partition | n | answered | uncited | ungrounded | truncated | cited-label | hedged\* |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| hit | 16 | 16 | 0 | 0 | 0 | 15 | 10 |
+| hit | 16 | 16 | 0 | 0 | 0 | 15 | 8 |
 | miss | 16 | 16 | 0 | 0 | 0 | 0 | 13 |
 | negative | 5 | 5 | 0 | 0 | 0 | 0 | 5 |
+
+The 08-05 run on the unfiltered index was identical except `hedged` on the hit
+partition, which read 10. That is inside the run-to-run band described below, so it
+is not a finding.
 
 **Zero ungrounded citations and zero uncited answers across 37 questions.** Every
 `[source N]` marker resolved to a passage actually supplied. That is the mechanical
 property the validation exists to enforce, and on this run it never had to fire.
 
-**All five negatives declined**, including the three whose topics appear only in
-bibliographies. The mixture-of-experts answer identified its passage as a reference
-entry rather than an explanation and named the paper as something not included — the
-specific failure this file called out as the hard case. n=5, so this is an existence
-proof that the mechanism can work, not a rate.
+**All five negatives declined, and the filter did not make that harder.** This was
+the specific risk in filtering bibliographies out: three of the five negatives used
+to decline partly *because* their top passage was visibly a reference list, and
+removing it hands the model something that reads more like prose. The
+mixture-of-experts answer now retrieves a passage about "products of experts" —
+a genuine near-miss — and names it as a different concept from sparse gating rather
+than answering from it. n=5, so this is an existence proof that the mechanism can
+work, not a rate.
+
+**One cosmetic artifact.** The state-space answer emitted `[source none]`, which
+looks like a citation and is not one. Validation ignores it (the marker pattern
+requires a number), so it is not an ungrounded citation — but a student sees
+something citation-shaped pointing at nothing. Not chased yet; recorded so it is not
+rediscovered as a validation bug.
 
 **The hedge proxy under-counts.** All four `miss` answers it scored as unhedged do
 hedge, in wording it does not match — "the passages don't spell out", "this is a
@@ -199,17 +299,23 @@ short; reading them is the measurement.
   no source text is quoted, since the corpus is copyrighted.
 - `baseline.json` — a saved report to compare future runs against. Scores and
   citations only, no retrieved text (which would carry both copyrighted material
-  and, before redaction, an email address).
+  and, before redaction, an email address). Its `provenance` records
+  `structural_filter`, because two reports with the same chunk count can still
+  describe different candidate sets.
 - `generation-baseline.json` — a **separate** instrument, written by
   `run_generation_eval.py`. It scores what the model does with these passages, over
   the same question set: mainly the ~16 questions where retrieval put no correct page
   in the top 5, and the 5 negatives. Kept in its own file so a generation change
-  cannot move the numbers above; `baseline.json` stays frozen.
+  cannot move the numbers above. The committed copy was produced before the
+  `chunks_retrievable` provenance field was added, within this same change, so it
+  does not carry it: the run used the filtered index (8,387 searchable), and the
+  next run will record that itself rather than the field being backfilled by hand
+  into a machine-written artifact.
 - `generation-answers.jsonl` — answer prose, **gitignored**. Answers may quote their
   passages, so the same rule that keeps retrieved text out of `baseline.json` keeps it
   out of git here. This is the file to actually read: the mechanical rates say whether
   citations resolve, not whether an answer is any good.
 
 Regenerate both the index and the numbers with the sequence in the top-level
-README: `build_index.py` → `audit_corpus.py` → `run_eval.py`, then
-`run_generation_eval.py` for the generation side.
+README: `build_index.py` → `audit_corpus.py` → `audit_structure.py` →
+`run_eval.py`, then `run_generation_eval.py` for the generation side.

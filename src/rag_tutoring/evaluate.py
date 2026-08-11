@@ -90,6 +90,13 @@ class QuestionResult:
     top_score: float
     top_source: str
     top_page: int
+    # How many of the top 5 were a document's apparatus -- a reference list, an
+    # acknowledgments section, a contents page -- rather than exposition. Always 0
+    # once the filter is on; the number is what the unfiltered arm is for. Recall
+    # cannot show this: a boilerplate chunk crowding out a fourth good passage moves
+    # no rate at all, and on the negatives, where nothing is labelled, recall is not
+    # even defined.
+    structural_in_top5: int = 0
 
     @property
     def hit_at(self) -> int:
@@ -251,22 +258,33 @@ class Report:
         return rows
 
 
-def evaluate(store, questions: Sequence[Question], k: int = max(CUTOFFS)) -> Report:
+def evaluate(
+    store,
+    questions: Sequence[Question],
+    k: int = max(CUTOFFS),
+    include_structural: bool = False,
+) -> Report:
     """Run every question through the store once and score the ranked results.
 
     One query per question at the largest cutoff, sliced for the smaller ones --
     re-querying per k would repeat identical work and could not disagree.
+
+    ``include_structural`` selects the arm. The default matches what the API serves;
+    passing ``True`` reproduces the pre-filter index from the same collection, which
+    is what makes the two numbers comparable -- same chunks, same embeddings, one
+    variable.
     """
     labeled: list[QuestionResult] = []
     negatives: list[QuestionResult] = []
     for q in questions:
-        hits = store.query(q.question, k=k)
+        hits = store.query(q.question, k=k, include_structural=include_structural)
         result = QuestionResult(
             question=q,
             rank=first_hit_rank([(h.source, h.page) for h in hits], q.sources),
             top_score=hits[0].score if hits else 0.0,
             top_source=hits[0].source if hits else "",
             top_page=hits[0].page if hits else 0,
+            structural_in_top5=sum(h.structural for h in hits[:5]),
         )
         (negatives if q.is_negative else labeled).append(result)
     provenance = {
@@ -275,6 +293,11 @@ def evaluate(store, questions: Sequence[Question], k: int = max(CUTOFFS)) -> Rep
         "chunk_overlap_tokens": CHUNK_OVERLAP_TOKENS,
         "collection": store.collection_name,
         "chunks_indexed": store.count(),
+        # Both numbers, and the flag that says which one the scores describe. A
+        # saved report that recorded only the total would look comparable to a
+        # report from the other arm while measuring a different candidate set.
+        "chunks_retrievable": store.count(include_structural=include_structural),
+        "structural_filter": not include_structural,
         # From the index, not from data/raw: an interrupted ingestion would
         # otherwise report the corpus size while the scores describe less of it.
         "documents_indexed": len(store.sources()),
@@ -300,6 +323,8 @@ def format_report(report: Report) -> str:
         f"  chunking   {p['chunk_max_tokens']} word-pieces, {p['chunk_overlap_tokens']} overlap",
         f"  index      {p['collection']}  {p['chunks_indexed']:,} chunks from "
         f"{p['documents_indexed']} of {p['documents_on_disk']} documents",
+        f"  filter     structural chunks {'EXCLUDED' if p['structural_filter'] else 'INCLUDED'}"
+        f"  -- {p['chunks_retrievable']:,} of {p['chunks_indexed']:,} chunks searchable",
         "",
         f"  {'':22s}   n   " + "  ".join(f"r@{k:<3d}" for k in CUTOFFS) + "     MRR",
         _line("all labelled", report.labeled),
@@ -335,6 +360,26 @@ def format_report(report: Report) -> str:
             f"    {r.question.id:24s} {r.question.style:14s} "
             f"top hit: {r.top_source[:38]:38s} p{r.top_page:<4d} {r.top_score:.3f}"
             for r in misses
+        ]
+
+    # Only ever non-empty on the unfiltered arm, and that is the point of printing
+    # it: it is the size of the problem the filter exists to fix, stated in the unit
+    # that matters -- slots on the page a student actually reads. Recall never sees
+    # this, because a boilerplate chunk crowding out a fourth good passage changes no
+    # rate, and on the negatives there is no rate to change.
+    everything = (*report.labeled, *report.negatives)
+    crowded = [r for r in everything if r.structural_in_top5]
+    if crowded:
+        taken = sum(r.structural_in_top5 for r in crowded)
+        out += [
+            "",
+            "  APPARATUS IN THE TOP 5 -- reference lists, acknowledgments, contents pages",
+            f"    {taken} of {5 * len(everything)} slots, on {len(crowded)} of "
+            f"{len(everything)} questions",
+        ]
+        out += [
+            f"    {r.question.id:26s} {r.structural_in_top5}/5"
+            for r in sorted(crowded, key=lambda r: (-r.structural_in_top5, r.question.id))[:8]
         ]
 
     if report.negatives:
@@ -377,6 +422,9 @@ def to_json(report: Report) -> str:
             "summary": {
                 "n_labeled": len(report.labeled),
                 "n_negatives": len(report.negatives),
+                "structural_top5_slots": sum(
+                    r.structural_in_top5 for r in (*report.labeled, *report.negatives)
+                ),
                 "mrr": round(mrr(report.labeled), 4),
                 **{f"recall@{k}": round(recall_at_k(report.labeled, k), 4) for k in CUTOFFS},
                 "by_style": {
@@ -398,6 +446,7 @@ def to_json(report: Report) -> str:
                     "top_score": round(r.top_score, 4),
                     "top_source": r.top_source,
                     "top_page": r.top_page,
+                    "structural_in_top5": r.structural_in_top5,
                 }
                 for r in (*report.labeled, *report.negatives)
             ],

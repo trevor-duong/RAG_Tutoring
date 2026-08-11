@@ -1,9 +1,10 @@
 """Score retrieval against eval/questions.jsonl.
 
-    python scripts/run_eval.py [--save eval/baseline.json] [--k 10]
+    python scripts/run_eval.py [--save eval/baseline.json] [--k 10] [--include-structural]
 
-Refuses to score if any label names a page the index does not contain: that
-would be an automatic miss no retriever could satisfy, and it would read as a
+Refuses to score if any label names a page the index does not contain -- or has left
+only structural chunks on, which is the same thing from a query's point of view.
+Either would be an automatic miss no retriever could satisfy, and it would read as a
 quality problem rather than the labelling bug it is.
 """
 
@@ -31,6 +32,12 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--save", type=Path, help="write the report as JSON (scores only, no text)")
     ap.add_argument("--k", type=int, default=max(CUTOFFS), help="retrieve this many per question")
+    ap.add_argument(
+        "--include-structural",
+        action="store_true",
+        help="search reference lists and acknowledgments too -- the pre-filter arm, "
+        "for measuring what the filter changed",
+    )
     args = ap.parse_args()
 
     questions = load_questions()
@@ -50,7 +57,7 @@ def main() -> int:
             print(f"  {label.source} p{label.page}", file=sys.stderr)
         return 1
 
-    report = evaluate(store, questions, k=args.k)
+    report = evaluate(store, questions, k=args.k, include_structural=args.include_structural)
     print(format_report(report))
     if args.save:
         args.save.parent.mkdir(parents=True, exist_ok=True)

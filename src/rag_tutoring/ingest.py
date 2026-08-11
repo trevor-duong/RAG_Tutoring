@@ -24,6 +24,7 @@ from rag_tutoring.config import (
     EMBEDDING_MODEL,
     PAGES_CACHE,
 )
+from rag_tutoring.structure import is_structural
 
 # Source types, each stored in ``data/raw/<type>s/``. The type rides along on
 # every chunk so retrieval can distinguish a paper's claim from a textbook's
@@ -90,6 +91,15 @@ class Chunk:
     source_type: str  # "paper" | "textbook"
     page: int  # 1-indexed page the chunk was extracted from
     chunk_index: int  # position of this chunk within its page
+    # A document's apparatus -- reference list, acknowledgments, contents page --
+    # rather than its exposition. Indexed either way and filtered at query time, so
+    # the decision stays reversible without re-embedding and both arms of the
+    # comparison come from one index. Set by ``chunk_pages``; the default is the safe
+    # direction, since a chunk built by hand is content until something says
+    # otherwise. Only the boolean is stored: the *reason* is a pure function of the
+    # text (``structure.classify``), so it can be recomputed from the index whenever
+    # a flag needs to be argued with, and cannot go stale against the rules.
+    structural: bool = False
 
     @property
     def id(self) -> str:
@@ -269,6 +279,14 @@ def chunk_pages(
     page. The tradeoff: a passage split across a page break lands in two chunks
     with no overlap bridging them. Acceptable for Phase 1; revisit if recall
     suffers on concepts that straddle pages.
+
+    Each chunk is also classified as exposition or apparatus here, because this is
+    where chunks come into existence and a chunk that reaches the store unclassified
+    would be indexed as content by default. Classification is per *chunk*, not per
+    page, and the difference is not academic: page 14 of the Lottery Ticket paper is
+    the acknowledgments page, and it also carries four chunks of appendix prose --
+    one of which is the top hit for a real question about overfitting. Filtering that
+    page would have deleted the answer to remove the apparatus.
     """
     count_tokens = count_tokens or token_counter()  # built once, reused across pages
     chunks: list[Chunk] = []
@@ -281,8 +299,35 @@ def chunk_pages(
                     source_type=source_type,
                     page=page_number,
                     chunk_index=idx,
+                    structural=is_structural(piece),
                 )
             )
+    return chunks
+
+
+def chunk_cached_pages(
+    pages: Iterable[Page],
+    count_tokens: Callable[[str], int] | None = None,
+    max_tokens: int = CHUNK_MAX_TOKENS,
+    overlap_tokens: int = CHUNK_OVERLAP_TOKENS,
+) -> list[Chunk]:
+    """Chunk the extraction cache, grouped back into documents.
+
+    The cache is a flat page stream; :func:`chunk_pages` works a document at a time
+    because ``source`` and ``source_type`` are per document. Shared by
+    ``build_index.py --from-cache`` and ``audit_structure.py`` so the audit describes
+    the chunks a rebuild would actually produce -- two copies of this regrouping
+    would drift, and the audit would then be reporting on chunks nobody indexes.
+    """
+    by_document: dict[tuple[str, str], list[tuple[int, str]]] = {}
+    for page in pages:
+        by_document.setdefault((page.source, page.source_type), []).append((page.page, page.text))
+    count_tokens = count_tokens or token_counter()
+    chunks: list[Chunk] = []
+    for (source, source_type), page_list in sorted(by_document.items()):
+        chunks += chunk_pages(
+            sorted(page_list), source, source_type, count_tokens, max_tokens, overlap_tokens
+        )
     return chunks
 
 

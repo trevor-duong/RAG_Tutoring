@@ -162,6 +162,8 @@ PROVENANCE = {
     "chunk_overlap_tokens": 60,
     "collection": "c",
     "chunks_indexed": 1,
+    "chunks_retrievable": 1,
+    "structural_filter": True,
     "documents_indexed": 1,
     "documents_on_disk": 1,
 }

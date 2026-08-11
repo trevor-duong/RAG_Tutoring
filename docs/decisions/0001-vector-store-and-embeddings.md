@@ -58,3 +58,11 @@ embedding, return chunks with metadata and scores. Holding that line means
 changing stores touches one module, not the notebooks and not the future API
 layer. If store-specific calls leak into calling code, this decision stops being
 cheap to reverse, which is the main thing to protect.
+
+**Amended 2026-08-10.** The interface has widened once: `query` takes a filter
+argument, and the filter is expressed as a Chroma `where` predicate inside
+`store.py`. Calling code is unaffected, so the line above holds, but a pgvector
+port now has to reimplement a predicate rather than only a similarity search. The
+alternative — over-fetching and filtering in the caller — was rejected on
+correctness, not purity: it silently returns fewer than `k` results, and it does
+so most on the questions where the filtered chunks rank highest.

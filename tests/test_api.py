@@ -115,6 +115,7 @@ def stamped_index_info():
         chunk_overlap_tokens=60,
         collection="tutoring-all-MiniLM-L6-v2",
         chunks_indexed=9169,
+        chunks_retrievable=8387,
         documents_indexed=37,
         generation_model="claude-sonnet-5",
     )
@@ -391,6 +392,11 @@ def test_health_reports_what_is_actually_indexed(client, stamped_index_info):
     app.state.index_info = stamped_index_info
     body = client.get("/health").json()
     assert body["chunks_indexed"] == 9169
+    assert body["chunks_retrievable"] == 8387, (
+        "reporting only the total says 9,169 chunks are searchable while 782 of them "
+        "are excluded at query time -- an endpoint stating something false about the "
+        "system it describes"
+    )
     assert body["documents_indexed"] == 37
     assert body["collection"] == "tutoring-all-MiniLM-L6-v2"
     assert body["generation_model"] == "claude-sonnet-5", (

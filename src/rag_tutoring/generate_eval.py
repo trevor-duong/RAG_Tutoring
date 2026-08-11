@@ -153,6 +153,12 @@ def run(
             "embedding_model": EMBEDDING_MODEL,
             "collection": store.collection_name,
             "chunks_indexed": store.count(),
+            # What retrieval could actually reach. Generation scores what the model
+            # does with the passages it is handed, so a change in which chunks are
+            # searchable changes these numbers without touching a line of the prompt
+            # -- provenance that omitted it would make two incomparable runs look
+            # like a prompt regression.
+            "chunks_retrievable": store.count(include_structural=False),
             "documents_indexed": len(store.sources()),
             "generation_model": generator.model,
             "prompt_version": PROMPT_VERSION,
@@ -234,7 +240,8 @@ def format_report(report: GenerationReport) -> str:
         temp = f"temp {p['temperature']}"
     lines.append(f"  {p['generation_model']}  prompt v{p['prompt_version']}  {temp}")
     lines.append(
-        f"  over {p['documents_indexed']} documents / {p['chunks_indexed']:,} chunks, k={p['k']}"
+        f"  over {p['documents_indexed']} documents / {p['chunks_retrievable']:,} searchable "
+        f"of {p['chunks_indexed']:,} chunks, k={p['k']}"
     )
     lines.append("")
 

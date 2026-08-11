@@ -190,6 +190,50 @@ def test_chunk_pages_matches_chunk_pdf_on_the_same_pages():
     assert {c.source_type for c in chunks} == {"paper"}
 
 
+def test_chunks_are_classified_where_they_are_created():
+    """Classification belongs to ``chunk_pages`` because that is the one place chunks
+    come into existence -- a chunk reaching the store unclassified is indexed as
+    content by default, and nothing downstream would say so.
+
+    Per chunk, not per page, and the difference is not academic. Page 14 of the
+    Lottery Ticket paper is its acknowledgments page, and it also carries four chunks
+    of appendix prose, one of which is the top hit for a real question about
+    overfitting. Filtering the page would have deleted the answer to remove the
+    apparatus.
+    """
+    # Both halves are padded to the same length so a one-token-per-word budget splits
+    # the page exactly between them, and so each clears structure.MIN_WORDS -- below
+    # that nothing is classified at all and the test would pass for the wrong reason.
+    half = 100
+
+    def pad_to(text: str) -> str:
+        filler = " ".join(f"term{i}" for i in range(half - len(text.split())))
+        return f"{text} {filler}".strip()
+
+    acknowledgments = pad_to(
+        "ACKNOWLEDGMENTS We gratefully acknowledge the compute contributed by our "
+        "partners, and we thank the reviewers for their generous feedback."
+    )
+    exposition = pad_to(
+        "Validation loss begins to increase as the model overfits the training data, "
+        "which is the effect the next figure shows for each pruning level."
+    )
+    assert len(acknowledgments.split()) == len(exposition.split()) == half
+
+    one = lambda w: 1  # noqa: E731 -- trivial cost function, one token per word
+    chunks = chunk_pages(
+        [(14, f"{acknowledgments} {exposition}")],
+        "Doc",
+        "paper",
+        one,
+        max_tokens=half,
+        overlap_tokens=0,
+    )
+    assert [c.structural for c in chunks] == [True, False], (
+        "the acknowledgments chunk is apparatus; the prose sharing its page is not"
+    )
+
+
 def test_chunk_id_is_stable_and_sorts_by_page():
     a = Chunk(text="x", source="Paper", source_type="paper", page=2, chunk_index=0)
     b = Chunk(text="y", source="Paper", source_type="paper", page=10, chunk_index=3)

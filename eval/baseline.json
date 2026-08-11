@@ -5,6 +5,8 @@
     "chunk_overlap_tokens": 60,
     "collection": "tutoring-all-MiniLM-L6-v2",
     "chunks_indexed": 9169,
+    "chunks_retrievable": 8387,
+    "structural_filter": true,
     "documents_indexed": 37,
     "documents_on_disk": 37,
     "k": 10
@@ -12,19 +14,20 @@
   "summary": {
     "n_labeled": 32,
     "n_negatives": 5,
-    "mrr": 0.3186,
+    "structural_top5_slots": 0,
+    "mrr": 0.3233,
     "recall@1": 0.1875,
     "recall@3": 0.4062,
     "recall@5": 0.5,
-    "recall@10": 0.6875,
+    "recall@10": 0.7188,
     "by_style": {
       "verbatim-term": {
         "n": 18,
-        "mrr": 0.3904,
+        "mrr": 0.3987,
         "recall@1": 0.2222,
         "recall@3": 0.5,
         "recall@5": 0.6111,
-        "recall@10": 0.8333
+        "recall@10": 0.8889
       },
       "paraphrase": {
         "n": 5,
@@ -52,7 +55,8 @@
       "rank": 1,
       "top_score": 0.5715,
       "top_source": "Neural Networks and Deep Learning (Nielsen)",
-      "top_page": 66
+      "top_page": 66,
+      "structural_in_top5": 0
     },
     {
       "id": "sgd-minibatch",
@@ -61,7 +65,8 @@
       "rank": 2,
       "top_score": 0.7015,
       "top_source": "Dive into Deep Learning",
-      "top_page": 454
+      "top_page": 454,
+      "structural_in_top5": 0
     },
     {
       "id": "sgd-batch-tradeoff",
@@ -70,16 +75,18 @@
       "rank": null,
       "top_score": 0.5009,
       "top_source": "Neural Machine Translation and Sequence-to-sequence Models- A Tutorial",
-      "top_page": 14
+      "top_page": 14,
+      "structural_in_top5": 0
     },
     {
       "id": "momentum-method",
       "style": "verbatim-term",
       "topic": "momentum",
-      "rank": 5,
+      "rank": 4,
       "top_score": 0.7505,
       "top_source": "Neural Networks and Deep Learning (Nielsen)",
-      "top_page": 166
+      "top_page": 166,
+      "structural_in_top5": 0
     },
     {
       "id": "momentum-oscillation",
@@ -88,7 +95,8 @@
       "rank": 1,
       "top_score": 0.493,
       "top_source": "Why Momentum Really Works",
-      "top_page": 1
+      "top_page": 1,
+      "structural_in_top5": 0
     },
     {
       "id": "adam-bias-correction",
@@ -97,7 +105,8 @@
       "rank": 1,
       "top_score": 0.6754,
       "top_source": "ADAM- A METHOD FOR STOCHASTIC OPTIMIZATION",
-      "top_page": 3
+      "top_page": 3,
+      "structural_in_top5": 0
     },
     {
       "id": "cross-entropy-loss",
@@ -106,7 +115,8 @@
       "rank": 3,
       "top_score": 0.7405,
       "top_source": "Dive into Deep Learning",
-      "top_page": 921
+      "top_page": 921,
+      "structural_in_top5": 0
     },
     {
       "id": "cross-entropy-why-log",
@@ -115,7 +125,8 @@
       "rank": 8,
       "top_score": 0.57,
       "top_source": "Dive into Deep Learning",
-      "top_page": 129
+      "top_page": 129,
+      "structural_in_top5": 0
     },
     {
       "id": "dropout-what",
@@ -124,7 +135,8 @@
       "rank": 3,
       "top_score": 0.7552,
       "top_source": "Neural Networks and Deep Learning (Nielsen)",
-      "top_page": 126
+      "top_page": 126,
+      "structural_in_top5": 0
     },
     {
       "id": "overfitting-symptom",
@@ -133,7 +145,8 @@
       "rank": null,
       "top_score": 0.498,
       "top_source": "THE LOTTERY TICKET HYPOTHESIS- FINDING SPARSE, TRAINABLE NEURAL NETWORKS",
-      "top_page": 14
+      "top_page": 14,
+      "structural_in_top5": 0
     },
     {
       "id": "batchnorm-covariate-shift",
@@ -142,7 +155,8 @@
       "rank": 7,
       "top_score": 0.7129,
       "top_source": "Dive into Deep Learning",
-      "top_page": 304
+      "top_page": 304,
+      "structural_in_top5": 0
     },
     {
       "id": "layernorm-vs-batchnorm",
@@ -151,7 +165,8 @@
       "rank": 7,
       "top_score": 0.8143,
       "top_source": "Dive into Deep Learning",
-      "top_page": 299
+      "top_page": 299,
+      "structural_in_top5": 0
     },
     {
       "id": "layernorm-small-batch",
@@ -160,7 +175,8 @@
       "rank": null,
       "top_score": 0.6577,
       "top_source": "Dive into Deep Learning",
-      "top_page": 305
+      "top_page": 305,
+      "structural_in_top5": 0
     },
     {
       "id": "residual-block",
@@ -169,7 +185,8 @@
       "rank": 8,
       "top_score": 0.5073,
       "top_source": "Dive into Deep Learning",
-      "top_page": 636
+      "top_page": 636,
+      "structural_in_top5": 0
     },
     {
       "id": "deeper-worse",
@@ -178,7 +195,8 @@
       "rank": 4,
       "top_score": 0.5929,
       "top_source": "Deep Residual Learning for Image Recognition",
-      "top_page": 5
+      "top_page": 5,
+      "structural_in_top5": 0
     },
     {
       "id": "conv-translation-invariance",
@@ -187,7 +205,8 @@
       "rank": 2,
       "top_score": 0.5766,
       "top_source": "Neural Networks and Deep Learning (Nielsen)",
-      "top_page": 231
+      "top_page": 231,
+      "structural_in_top5": 0
     },
     {
       "id": "conv-weight-reuse",
@@ -196,7 +215,8 @@
       "rank": 8,
       "top_score": 0.5422,
       "top_source": "Dive into Deep Learning",
-      "top_page": 298
+      "top_page": 298,
+      "structural_in_top5": 0
     },
     {
       "id": "lstm-gates",
@@ -205,7 +225,8 @@
       "rank": 1,
       "top_score": 0.7663,
       "top_source": "Dive into Deep Learning",
-      "top_page": 365
+      "top_page": 365,
+      "structural_in_top5": 0
     },
     {
       "id": "lstm-long-memory",
@@ -214,7 +235,8 @@
       "rank": null,
       "top_score": 0.5878,
       "top_source": "Neural Machine Translation and Sequence-to-sequence Models- A Tutorial",
-      "top_page": 30
+      "top_page": 30,
+      "structural_in_top5": 0
     },
     {
       "id": "gradient-clipping",
@@ -223,7 +245,8 @@
       "rank": 1,
       "top_score": 0.4761,
       "top_source": "Dive into Deep Learning",
-      "top_page": 345
+      "top_page": 345,
+      "structural_in_top5": 0
     },
     {
       "id": "seq2seq-bottleneck",
@@ -232,16 +255,18 @@
       "rank": 3,
       "top_score": 0.5631,
       "top_source": "Neural Machine Translation and Sequence-to-sequence Models- A Tutorial",
-      "top_page": 46
+      "top_page": 46,
+      "structural_in_top5": 0
     },
     {
       "id": "attention-alignment",
       "style": "verbatim-term",
       "topic": "attention",
-      "rank": null,
+      "rank": 10,
       "top_score": 0.7243,
       "top_source": "Neural Machine Translation and Sequence-to-sequence Models- A Tutorial",
-      "top_page": 53
+      "top_page": 53,
+      "structural_in_top5": 0
     },
     {
       "id": "scaled-dot-product",
@@ -250,7 +275,8 @@
       "rank": 6,
       "top_score": 0.6364,
       "top_source": "Dive into Deep Learning",
-      "top_page": 402
+      "top_page": 402,
+      "structural_in_top5": 0
     },
     {
       "id": "word-order-ignored",
@@ -259,7 +285,8 @@
       "rank": null,
       "top_score": 0.5605,
       "top_source": "StatQuest Illustrated Guide to Neural Networks and AI",
-      "top_page": 225
+      "top_page": 225,
+      "structural_in_top5": 0
     },
     {
       "id": "cbow-vs-skipgram",
@@ -268,7 +295,8 @@
       "rank": 3,
       "top_score": 0.6121,
       "top_source": "Dive into Deep Learning",
-      "top_page": 652
+      "top_page": 652,
+      "structural_in_top5": 0
     },
     {
       "id": "glove-cooccurrence",
@@ -277,7 +305,8 @@
       "rank": null,
       "top_score": 0.6499,
       "top_source": "GloVe- Global Vectors for Word Representation",
-      "top_page": 2
+      "top_page": 2,
+      "structural_in_top5": 0
     },
     {
       "id": "bpe-subwords",
@@ -286,7 +315,8 @@
       "rank": null,
       "top_score": 0.7225,
       "top_source": "Dive into Deep Learning",
-      "top_page": 673
+      "top_page": 673,
+      "structural_in_top5": 0
     },
     {
       "id": "oov-garbage",
@@ -295,7 +325,8 @@
       "rank": 3,
       "top_score": 0.6177,
       "top_source": "Neural Machine Translation and Sequence-to-sequence Models- A Tutorial",
-      "top_page": 55
+      "top_page": 55,
+      "structural_in_top5": 0
     },
     {
       "id": "bert-mlm",
@@ -304,7 +335,8 @@
       "rank": null,
       "top_score": 0.7575,
       "top_source": "Dive into Deep Learning",
-      "top_page": 685
+      "top_page": 685,
+      "structural_in_top5": 0
     },
     {
       "id": "cheap-finetune",
@@ -313,7 +345,8 @@
       "rank": 1,
       "top_score": 0.5155,
       "top_source": "LORA- LOW-RANK ADAPTATION OF LARGE LANGUAGE MODELS",
-      "top_page": 2
+      "top_page": 2,
+      "structural_in_top5": 0
     },
     {
       "id": "rag-nonparametric",
@@ -322,7 +355,8 @@
       "rank": 4,
       "top_score": 0.7026,
       "top_source": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks",
-      "top_page": 9
+      "top_page": 9,
+      "structural_in_top5": 0
     },
     {
       "id": "repetitive-generation",
@@ -331,7 +365,8 @@
       "rank": null,
       "top_score": 0.4534,
       "top_source": "Language Models are Few-Shot Learners",
-      "top_page": 23
+      "top_page": 23,
+      "structural_in_top5": 0
     },
     {
       "id": "neg-diffusion",
@@ -340,7 +375,8 @@
       "rank": null,
       "top_score": 0.4208,
       "top_source": "Dive into Deep Learning",
-      "top_page": 180
+      "top_page": 180,
+      "structural_in_top5": 0
     },
     {
       "id": "neg-state-space",
@@ -349,7 +385,8 @@
       "rank": null,
       "top_score": 0.6,
       "top_source": "Dive into Deep Learning",
-      "top_page": 399
+      "top_page": 399,
+      "structural_in_top5": 0
     },
     {
       "id": "neg-gnn",
@@ -358,16 +395,18 @@
       "rank": null,
       "top_score": 0.5086,
       "top_source": "Dive into Deep Learning",
-      "top_page": 186
+      "top_page": 186,
+      "structural_in_top5": 0
     },
     {
       "id": "neg-moe",
       "style": "verbatim-term",
       "topic": "mixture of experts",
       "rank": null,
-      "top_score": 0.5361,
-      "top_source": "Training Compute-Optimal Large Language Models",
-      "top_page": 21
+      "top_score": 0.4771,
+      "top_source": "A Neural Probabilistic Language Model",
+      "top_page": 15,
+      "structural_in_top5": 0
     },
     {
       "id": "neg-distillation",
@@ -376,7 +415,8 @@
       "rank": null,
       "top_score": 0.5779,
       "top_source": "Language Models are Few-Shot Learners",
-      "top_page": 34
+      "top_page": 34,
+      "structural_in_top5": 0
     }
   ]
 }

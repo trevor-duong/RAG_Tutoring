@@ -17,9 +17,9 @@
       "truncated": 0,
       "uncited_answers": 0,
       "cited_a_labelled_page": 15,
-      "hedge_phrase_present": 10,
-      "mean_cited": 3.69,
-      "mean_answer_chars": 1140
+      "hedge_phrase_present": 8,
+      "mean_cited": 3.94,
+      "mean_answer_chars": 1139
     },
     "miss": {
       "n": 16,
@@ -29,8 +29,8 @@
       "uncited_answers": 0,
       "cited_a_labelled_page": 0,
       "hedge_phrase_present": 13,
-      "mean_cited": 3.19,
-      "mean_answer_chars": 1171
+      "mean_cited": 3.31,
+      "mean_answer_chars": 1053
     },
     "negative": {
       "n": 5,
@@ -40,8 +40,8 @@
       "uncited_answers": 0,
       "cited_a_labelled_page": 0,
       "hedge_phrase_present": 5,
-      "mean_cited": 3.6,
-      "mean_answer_chars": 734
+      "mean_cited": 4.2,
+      "mean_answer_chars": 765
     }
   },
   "outcomes": [
@@ -53,10 +53,10 @@
       "answered": true,
       "ungrounded": false,
       "truncated": false,
-      "n_cited": 2,
+      "n_cited": 3,
       "cited_a_labelled_page": true,
       "hedge_phrase_present": true,
-      "answer_chars": 1019
+      "answer_chars": 865
     },
     {
       "question_id": "sgd-minibatch",
@@ -66,10 +66,10 @@
       "answered": true,
       "ungrounded": false,
       "truncated": false,
-      "n_cited": 5,
-      "cited_a_labelled_page": true,
+      "n_cited": 4,
+      "cited_a_labelled_page": false,
       "hedge_phrase_present": true,
-      "answer_chars": 1262
+      "answer_chars": 1532
     },
     {
       "question_id": "sgd-batch-tradeoff",
@@ -81,21 +81,21 @@
       "truncated": false,
       "n_cited": 3,
       "cited_a_labelled_page": false,
-      "hedge_phrase_present": true,
-      "answer_chars": 869
+      "hedge_phrase_present": false,
+      "answer_chars": 854
     },
     {
       "question_id": "momentum-method",
       "style": "verbatim-term",
       "partition": "hit",
-      "retrieval_rank": 5,
+      "retrieval_rank": 4,
       "answered": true,
       "ungrounded": false,
       "truncated": false,
-      "n_cited": 4,
+      "n_cited": 5,
       "cited_a_labelled_page": true,
       "hedge_phrase_present": true,
-      "answer_chars": 1368
+      "answer_chars": 1644
     },
     {
       "question_id": "momentum-oscillation",
@@ -105,10 +105,10 @@
       "answered": true,
       "ungrounded": false,
       "truncated": false,
-      "n_cited": 3,
+      "n_cited": 4,
       "cited_a_labelled_page": true,
       "hedge_phrase_present": false,
-      "answer_chars": 1056
+      "answer_chars": 800
     },
     {
       "question_id": "adam-bias-correction",
@@ -121,7 +121,7 @@
       "n_cited": 3,
       "cited_a_labelled_page": true,
       "hedge_phrase_present": true,
-      "answer_chars": 945
+      "answer_chars": 960
     },
     {
       "question_id": "cross-entropy-loss",
@@ -133,8 +133,8 @@
       "truncated": false,
       "n_cited": 5,
       "cited_a_labelled_page": true,
-      "hedge_phrase_present": true,
-      "answer_chars": 1333
+      "hedge_phrase_present": false,
+      "answer_chars": 1256
     },
     {
       "question_id": "cross-entropy-why-log",
@@ -144,10 +144,10 @@
       "answered": true,
       "ungrounded": false,
       "truncated": false,
-      "n_cited": 3,
+      "n_cited": 1,
       "cited_a_labelled_page": false,
       "hedge_phrase_present": true,
-      "answer_chars": 1410
+      "answer_chars": 1138
     },
     {
       "question_id": "dropout-what",
@@ -160,7 +160,7 @@
       "n_cited": 4,
       "cited_a_labelled_page": true,
       "hedge_phrase_present": false,
-      "answer_chars": 1271
+      "answer_chars": 1066
     },
     {
       "question_id": "overfitting-symptom",
@@ -173,7 +173,7 @@
       "n_cited": 2,
       "cited_a_labelled_page": false,
       "hedge_phrase_present": true,
-      "answer_chars": 934
+      "answer_chars": 977
     },
     {
       "question_id": "batchnorm-covariate-shift",
@@ -185,8 +185,8 @@
       "truncated": false,
       "n_cited": 5,
       "cited_a_labelled_page": false,
-      "hedge_phrase_present": true,
-      "answer_chars": 1649
+      "hedge_phrase_present": false,
+      "answer_chars": 1322
     },
     {
       "question_id": "layernorm-vs-batchnorm",
@@ -196,10 +196,10 @@
       "answered": true,
       "ungrounded": false,
       "truncated": false,
-      "n_cited": 2,
+      "n_cited": 4,
       "cited_a_labelled_page": false,
       "hedge_phrase_present": true,
-      "answer_chars": 1627
+      "answer_chars": 1410
     },
     {
       "question_id": "layernorm-small-batch",
@@ -212,7 +212,7 @@
       "n_cited": 3,
       "cited_a_labelled_page": false,
       "hedge_phrase_present": true,
-      "answer_chars": 893
+      "answer_chars": 1142
     },
     {
       "question_id": "residual-block",
@@ -225,7 +225,7 @@
       "n_cited": 3,
       "cited_a_labelled_page": false,
       "hedge_phrase_present": true,
-      "answer_chars": 1458
+      "answer_chars": 1246
     },
     {
       "question_id": "deeper-worse",
@@ -235,10 +235,10 @@
       "answered": true,
       "ungrounded": false,
       "truncated": false,
-      "n_cited": 4,
+      "n_cited": 5,
       "cited_a_labelled_page": true,
       "hedge_phrase_present": true,
-      "answer_chars": 969
+      "answer_chars": 1157
     },
     {
       "question_id": "conv-translation-invariance",
@@ -248,10 +248,10 @@
       "answered": true,
       "ungrounded": false,
       "truncated": false,
-      "n_cited": 4,
+      "n_cited": 5,
       "cited_a_labelled_page": true,
       "hedge_phrase_present": false,
-      "answer_chars": 1041
+      "answer_chars": 963
     },
     {
       "question_id": "conv-weight-reuse",
@@ -261,10 +261,10 @@
       "answered": true,
       "ungrounded": false,
       "truncated": false,
-      "n_cited": 3,
+      "n_cited": 2,
       "cited_a_labelled_page": false,
       "hedge_phrase_present": true,
-      "answer_chars": 1332
+      "answer_chars": 732
     },
     {
       "question_id": "lstm-gates",
@@ -274,10 +274,10 @@
       "answered": true,
       "ungrounded": false,
       "truncated": false,
-      "n_cited": 4,
-      "cited_a_labelled_page": false,
+      "n_cited": 5,
+      "cited_a_labelled_page": true,
       "hedge_phrase_present": false,
-      "answer_chars": 1425
+      "answer_chars": 1265
     },
     {
       "question_id": "lstm-long-memory",
@@ -290,7 +290,7 @@
       "n_cited": 4,
       "cited_a_labelled_page": false,
       "hedge_phrase_present": true,
-      "answer_chars": 950
+      "answer_chars": 931
     },
     {
       "question_id": "gradient-clipping",
@@ -303,7 +303,7 @@
       "n_cited": 2,
       "cited_a_labelled_page": true,
       "hedge_phrase_present": false,
-      "answer_chars": 827
+      "answer_chars": 955
     },
     {
       "question_id": "seq2seq-bottleneck",
@@ -316,7 +316,7 @@
       "n_cited": 2,
       "cited_a_labelled_page": true,
       "hedge_phrase_present": true,
-      "answer_chars": 1062
+      "answer_chars": 1300
     },
     {
       "question_id": "attention-alignment",
@@ -326,10 +326,10 @@
       "answered": true,
       "ungrounded": false,
       "truncated": false,
-      "n_cited": 4,
+      "n_cited": 5,
       "cited_a_labelled_page": false,
-      "hedge_phrase_present": false,
-      "answer_chars": 1287
+      "hedge_phrase_present": true,
+      "answer_chars": 1050
     },
     {
       "question_id": "scaled-dot-product",
@@ -341,8 +341,8 @@
       "truncated": false,
       "n_cited": 3,
       "cited_a_labelled_page": false,
-      "hedge_phrase_present": false,
-      "answer_chars": 969
+      "hedge_phrase_present": true,
+      "answer_chars": 836
     },
     {
       "question_id": "word-order-ignored",
@@ -352,10 +352,10 @@
       "answered": true,
       "ungrounded": false,
       "truncated": false,
-      "n_cited": 3,
+      "n_cited": 4,
       "cited_a_labelled_page": false,
       "hedge_phrase_present": false,
-      "answer_chars": 732
+      "answer_chars": 1037
     },
     {
       "question_id": "cbow-vs-skipgram",
@@ -367,8 +367,8 @@
       "truncated": false,
       "n_cited": 4,
       "cited_a_labelled_page": true,
-      "hedge_phrase_present": true,
-      "answer_chars": 1037
+      "hedge_phrase_present": false,
+      "answer_chars": 1175
     },
     {
       "question_id": "glove-cooccurrence",
@@ -378,10 +378,10 @@
       "answered": true,
       "ungrounded": false,
       "truncated": false,
-      "n_cited": 4,
+      "n_cited": 5,
       "cited_a_labelled_page": false,
       "hedge_phrase_present": true,
-      "answer_chars": 1299
+      "answer_chars": 1255
     },
     {
       "question_id": "bpe-subwords",
@@ -394,7 +394,7 @@
       "n_cited": 4,
       "cited_a_labelled_page": false,
       "hedge_phrase_present": true,
-      "answer_chars": 1260
+      "answer_chars": 1226
     },
     {
       "question_id": "oov-garbage",
@@ -404,10 +404,10 @@
       "answered": true,
       "ungrounded": false,
       "truncated": false,
-      "n_cited": 5,
+      "n_cited": 4,
       "cited_a_labelled_page": true,
-      "hedge_phrase_present": false,
-      "answer_chars": 1351
+      "hedge_phrase_present": true,
+      "answer_chars": 1213
     },
     {
       "question_id": "bert-mlm",
@@ -420,7 +420,7 @@
       "n_cited": 4,
       "cited_a_labelled_page": false,
       "hedge_phrase_present": true,
-      "answer_chars": 1171
+      "answer_chars": 986
     },
     {
       "question_id": "cheap-finetune",
@@ -430,10 +430,10 @@
       "answered": true,
       "ungrounded": false,
       "truncated": false,
-      "n_cited": 4,
+      "n_cited": 3,
       "cited_a_labelled_page": true,
-      "hedge_phrase_present": true,
-      "answer_chars": 1037
+      "hedge_phrase_present": false,
+      "answer_chars": 889
     },
     {
       "question_id": "rag-nonparametric",
@@ -443,10 +443,10 @@
       "answered": true,
       "ungrounded": false,
       "truncated": false,
-      "n_cited": 4,
+      "n_cited": 5,
       "cited_a_labelled_page": true,
       "hedge_phrase_present": true,
-      "answer_chars": 1232
+      "answer_chars": 1187
     },
     {
       "question_id": "repetitive-generation",
@@ -459,7 +459,7 @@
       "n_cited": 1,
       "cited_a_labelled_page": false,
       "hedge_phrase_present": true,
-      "answer_chars": 893
+      "answer_chars": 704
     },
     {
       "question_id": "neg-diffusion",
@@ -469,10 +469,10 @@
       "answered": true,
       "ungrounded": false,
       "truncated": false,
-      "n_cited": 5,
+      "n_cited": 3,
       "cited_a_labelled_page": false,
       "hedge_phrase_present": true,
-      "answer_chars": 791
+      "answer_chars": 782
     },
     {
       "question_id": "neg-state-space",
@@ -482,10 +482,10 @@
       "answered": true,
       "ungrounded": false,
       "truncated": false,
-      "n_cited": 4,
+      "n_cited": 3,
       "cited_a_labelled_page": false,
       "hedge_phrase_present": true,
-      "answer_chars": 1028
+      "answer_chars": 778
     },
     {
       "question_id": "neg-gnn",
@@ -495,10 +495,10 @@
       "answered": true,
       "ungrounded": false,
       "truncated": false,
-      "n_cited": 2,
+      "n_cited": 5,
       "cited_a_labelled_page": false,
       "hedge_phrase_present": true,
-      "answer_chars": 645
+      "answer_chars": 874
     },
     {
       "question_id": "neg-moe",
@@ -508,10 +508,10 @@
       "answered": true,
       "ungrounded": false,
       "truncated": false,
-      "n_cited": 2,
+      "n_cited": 5,
       "cited_a_labelled_page": false,
       "hedge_phrase_present": true,
-      "answer_chars": 645
+      "answer_chars": 801
     },
     {
       "question_id": "neg-distillation",
@@ -524,7 +524,7 @@
       "n_cited": 5,
       "cited_a_labelled_page": false,
       "hedge_phrase_present": true,
-      "answer_chars": 560
+      "answer_chars": 591
     }
   ]
 }
