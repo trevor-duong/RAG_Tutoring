@@ -28,7 +28,7 @@ logging.getLogger("transformers").setLevel(logging.CRITICAL)
 
 from dotenv import load_dotenv  # noqa: E402
 
-from rag_tutoring.config import ENV_FILE  # noqa: E402
+from rag_tutoring.config import local_env_file  # noqa: E402
 from rag_tutoring.evaluate import load_questions, unindexed_labels  # noqa: E402
 from rag_tutoring.generate import Generator  # noqa: E402
 from rag_tutoring.generate_eval import format_report, run  # noqa: E402
@@ -43,8 +43,10 @@ def main() -> int:
     ap.add_argument("--k", type=int, default=5, help="passages handed to the model per question")
     args = ap.parse_args()
 
-    # Same entry-point rule as the API: the .env is read here, not on import.
-    load_dotenv(ENV_FILE)
+    # Same entry-point rule as the API: the .env is read here, not on import. And the
+    # same guard -- ``load_dotenv(None)`` searches rather than skips.
+    if (env_path := local_env_file()) is not None:
+        load_dotenv(env_path)
 
     key = os.environ.get("ANTHROPIC_API_KEY")
     if not key:

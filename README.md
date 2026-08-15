@@ -203,6 +203,32 @@ curl -s -X POST localhost:8000/ask -H 'Content-Type: application/json' \
 chunk and document counts — because a result set means little without the index
 that produced it. Interactive docs at `/docs`.
 
+### Where the index lives
+
+`RAG_CHROMA_DIR` overrides it; unset, it is `chroma/` in the checkout. That variable
+is the only path configuration a deployment needs, and it exists because the served
+app and the toolchain want different things from the filesystem.
+
+The toolchain — ingestion, the audits, the eval — reads source PDFs, an extraction
+cache and the eval set, all of which only exist in a checkout. The API reads the index
+and nothing else. So `config.py` resolves the first group through functions that raise
+when there is no repository, and the second from the environment. Before that split
+every path was a module-level constant computed at import from a walk up out of the
+working directory, which raised when it found no `pyproject.toml` — fine on a laptop,
+and a startup crash in a container, where the package sits in site-packages and no
+checkout exists. `api.py` imports `config`, so the failure landed before uvicorn could
+bind a port.
+
+The repository is located from `__file__` rather than from the working directory,
+which matters in the one case that would otherwise hide the bug: an image built with
+`COPY . /app` has a `pyproject.toml` above the working directory, so a cwd-based search
+would succeed, quietly default the index to `/app/chroma`, and leave `RAG_CHROMA_DIR`
+never exercised.
+
+`tests/test_config.py` runs in a subprocess against a staged copy of the package,
+because pytest always has the repo root available — an in-process test here would pass
+with the fix reverted.
+
 Citations say **"PDF page 14"**, not "p. 14". The page is pypdf's index, which
 matches a PDF viewer's counter but *not* the number printed on the page — front
 matter puts those 18 apart in *Dive into Deep Learning*. A bare "p. 14" would be

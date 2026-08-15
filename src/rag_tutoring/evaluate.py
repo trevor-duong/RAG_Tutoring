@@ -30,11 +30,16 @@ from rag_tutoring.config import (
     CHUNK_MAX_TOKENS,
     CHUNK_OVERLAP_TOKENS,
     EMBEDDING_MODEL,
-    ROOT,
+    repo_root,
 )
 from rag_tutoring.ingest import corpus_documents
 
-QUESTIONS_PATH = ROOT / "eval" / "questions.jsonl"
+
+def questions_path() -> Path:
+    """The eval set. A function, not a constant: it lives in the checkout, and only
+    the eval harness reads it -- see the module docstring in ``config``."""
+    return repo_root() / "eval" / "questions.jsonl"
+
 
 # How the question is phrased, which is the axis that most changes the score.
 # A question reusing the source's own term is an easier retrieval problem than
@@ -103,13 +108,14 @@ class QuestionResult:
         return self.rank if self.rank is not None else 10**9
 
 
-def load_questions(path: Path = QUESTIONS_PATH) -> list[Question]:
+def load_questions(path: Path | None = None) -> list[Question]:
     """Parse and validate the question set.
 
     Validation is strict because every mistake here is silent: a bad style tag
     quietly drops a question from a breakdown, and a duplicate id quietly
     overwrites a result.
     """
+    path = path if path is not None else questions_path()
     questions: list[Question] = []
     seen: set[str] = set()
     for lineno, line in enumerate(path.read_text().splitlines(), start=1):

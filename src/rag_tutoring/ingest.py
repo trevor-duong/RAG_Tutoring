@@ -20,9 +20,9 @@ from pypdf import PdfReader
 from rag_tutoring.config import (
     CHUNK_MAX_TOKENS,
     CHUNK_OVERLAP_TOKENS,
-    DATA_RAW,
     EMBEDDING_MODEL,
-    PAGES_CACHE,
+    data_raw_dir,
+    pages_cache,
 )
 from rag_tutoring.structure import is_structural
 
@@ -32,13 +32,18 @@ from rag_tutoring.structure import is_structural
 SOURCE_TYPES = ("paper", "textbook")
 
 
-def corpus_documents(data_raw: Path = DATA_RAW) -> list[tuple[Path, str]]:
+def corpus_documents(data_raw: Path | None = None) -> list[tuple[Path, str]]:
     """Every source PDF with its source type, in a stable (sorted) order.
 
     One definition of "what the corpus is", shared by ingestion, the eval
     harness, and any audit script -- so a document cannot be indexed but missing
     from an audit, or vice versa.
+
+    Defaults to ``None`` rather than to the configured directory because that
+    directory only exists in a checkout: resolving it in the signature would run at
+    import and take this module down wherever there isn't one.
     """
+    data_raw = data_raw if data_raw is not None else data_raw_dir()
     return [
         (path, kind)
         for kind in SOURCE_TYPES
@@ -72,8 +77,9 @@ def write_pages(path: Path, pages: Iterable[Page]) -> int:
     return written
 
 
-def read_pages(path: Path = PAGES_CACHE) -> list[Page]:
+def read_pages(path: Path | None = None) -> list[Page]:
     """Read the extraction cache, with a pointed error if it has not been built."""
+    path = path if path is not None else pages_cache()
     if not path.exists():
         raise FileNotFoundError(
             f"no extraction cache at {path}; run scripts/build_index.py first "

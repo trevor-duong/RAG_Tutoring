@@ -44,7 +44,7 @@ from rag_tutoring.config import (
     CHUNK_MAX_TOKENS,
     CHUNK_OVERLAP_TOKENS,
     EMBEDDING_MODEL,
-    ENV_FILE,
+    local_env_file,
 )
 from rag_tutoring.generate import (
     Generator,
@@ -155,10 +155,16 @@ async def lifespan(app: FastAPI):
     properly is the same cache-invalidation question Phase 4 takes up.
     """
     # A local .env is read *here*, at the process entry point, rather than at import of
-    # config -- see the ENV_FILE comment. ``override=False`` is the default and the one
-    # that matters: a real environment variable, which is how a deployment supplies the
-    # key, always beats a stale file someone left in the working copy.
-    load_dotenv(ENV_FILE)
+    # config -- see the local_env_file comment. ``override=False`` is the default and
+    # the one that matters: a real environment variable, which is how a deployment
+    # supplies the key, always beats a stale file someone left in the working copy.
+    #
+    # The guard is not cosmetic. There is no .env to read in a container, and
+    # ``load_dotenv(None)`` does not mean "skip it" -- it means "search upward for any
+    # .env you can find", which is a wider blast radius in a deployment than the
+    # explicit path this replaced.
+    if (env_path := local_env_file()) is not None:
+        load_dotenv(env_path)
 
     store = VectorStore()
     generator = generator_from_env()

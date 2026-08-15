@@ -10,7 +10,7 @@ leave chunks from older settings behind (see ``VectorStore.reset``).
 
 Extraction is the slow part (~14 minutes for this corpus, most of it one 709 MB
 illustrated textbook), so each page is extracted exactly once and the text is
-cached to ``config.PAGES_CACHE`` on the way through. ``audit_corpus.py`` and
+cached to ``config.pages_cache()`` on the way through. ``audit_corpus.py`` and
 ``find_passage.py`` read that cache instead of paying for extraction again.
 
 ``--from-cache`` skips extraction and re-chunks that cache instead, for a change
@@ -32,7 +32,7 @@ import time
 logging.getLogger("pypdf").setLevel(logging.CRITICAL)
 logging.getLogger("transformers").setLevel(logging.CRITICAL)
 
-from rag_tutoring.config import PAGES_CACHE  # noqa: E402
+from rag_tutoring.config import pages_cache  # noqa: E402
 from rag_tutoring.ingest import (  # noqa: E402
     Page,
     chunk_cached_pages,
@@ -113,10 +113,11 @@ def main() -> int:
             flush=True,
         )
 
-    cached = write_pages(PAGES_CACHE, all_pages)
+    cache_path = pages_cache()
+    cached = write_pages(cache_path, all_pages)
     print(
         f"\nindexed {store.count():,} chunks from {cached:,} pages "
-        f"in {time.time() - started:.0f}s; cached page text to {PAGES_CACHE}"
+        f"in {time.time() - started:.0f}s; cached page text to {cache_path}"
     )
     if store.count() != total_chunks:
         print(

@@ -13,7 +13,7 @@ from pathlib import Path
 import chromadb
 from sentence_transformers import SentenceTransformer
 
-from rag_tutoring.config import CHROMA_DIR, EMBEDDING_MODEL, MODEL_MAX_TOKENS
+from rag_tutoring.config import EMBEDDING_MODEL, MODEL_MAX_TOKENS, chroma_dir
 from rag_tutoring.ingest import Chunk
 
 
@@ -37,10 +37,16 @@ class VectorStore:
 
     def __init__(
         self,
-        persist_dir: Path = CHROMA_DIR,
+        persist_dir: Path | None = None,
         model_name: str = EMBEDDING_MODEL,
         collection: str | None = None,
     ) -> None:
+        # ``None`` rather than ``config.chroma_dir()`` as the default, because a default
+        # argument is evaluated once at import: baking it in would freeze the location
+        # at whatever the environment held when the first module imported this one, and
+        # a deployment that sets RAG_CHROMA_DIR after that would be ignored with no
+        # error. Resolving here reads the environment when the store is actually opened.
+        persist_dir = persist_dir if persist_dir is not None else chroma_dir()
         self.model = SentenceTransformer(model_name)
         # Chunking sizes its windows against config.MODEL_MAX_TOKENS, but the
         # limit that actually binds is the model's own. If the two disagree --
