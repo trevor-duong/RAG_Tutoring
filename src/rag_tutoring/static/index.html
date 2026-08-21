@@ -370,6 +370,16 @@
           body: JSON.stringify({ question, k: K }),
         });
 
+        // 401 gets its own sentence because it is the one failure with a fix a
+        // student can carry out, and the generic message would send them to
+        // rephrase a question that was never the problem. A 401 from fetch does
+        // not raise the browser's sign-in prompt -- only a navigation does -- so
+        // "reload" is not filler, it is the actual recovery path.
+        if (response.status === 401) {
+          setStatus("Your access expired. Reload the page to sign in again.");
+          return;
+        }
+
         // A 422 body is {"detail": [...]} -- an array of objects. Printing it
         // would show a student "[object Object]", so every failure gets one
         // fixed sentence and the details stay in the network tab.

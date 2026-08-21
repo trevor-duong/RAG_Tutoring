@@ -14,8 +14,9 @@ cached to ``config.pages_cache()`` on the way through. ``audit_corpus.py`` and
 ``find_passage.py`` read that cache instead of paying for extraction again.
 
 ``--from-cache`` skips extraction and re-chunks that cache instead, for a change
-that alters chunking or metadata but not extraction -- 15 seconds rather than 14
-minutes. Valid **only** while ``load_pdf`` is unchanged, since the cache is its
+that alters chunking or metadata but not extraction. It saves the extraction pass
+and not the embedding one, which dominates: 21 minutes for this corpus, measured
+2026-08-17. Valid **only** while ``load_pdf`` is unchanged, since the cache is its
 output; the script cannot verify that, so it checks what it can (same documents,
 same page count) and the real guard is downstream: re-running ``run_eval.py`` on an
 unchanged setting has to reproduce the saved baseline exactly, and a stale cache

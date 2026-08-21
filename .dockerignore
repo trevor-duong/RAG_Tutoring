@@ -1,0 +1,43 @@
+# What does NOT go into the build context. Without this the context is ~2.5 GB and
+# every `flyctl deploy` uploads it: .venv/ alone is 1.5 GB and data/ is 806 MB.
+#
+# `chroma/` is deliberately absent from this file. It is the payload -- the index is
+# baked into the image so the artifact and the index it serves have one version number,
+# which is the property `eval/baseline.json` depends on. See docs/decisions/0002.
+
+.venv/
+venv/
+
+# Source documents and the extraction cache. The chunked text ships inside the index
+# instead; the PDFs themselves have no place in a running container.
+data/
+
+.git/
+.gitignore
+.github/
+
+# Toolchain, not runtime: the notebook, the eval set and its reports, the audits.
+# config.py raises for these paths in an installed copy, which is exactly the split
+# this excludes along.
+notebooks/
+eval/
+docs/
+tests/
+scripts/
+
+# Build and tooling output
+build/
+dist/
+*.egg-info/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Never. Secrets reach the container as real environment variables, set by the
+# platform -- nothing in the image reads a file.
+.env
+.env.local
+
+.DS_Store

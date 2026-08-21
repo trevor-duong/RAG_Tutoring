@@ -11,9 +11,9 @@ Pilot target: real tutoring students, summer 2026.
 
 **Phase 3 — frontend + deploy.** Source PDFs are chunked, embedded locally, stored
 in Chroma, served over HTTP as cited passages, and searchable from a single page.
-Not yet deployed. The full corpus is indexed —
-9,169 chunks from 37 documents — and retrieval quality is measured rather than
-eyeballed:
+Deployed to Fly.io behind a shared password, index baked into the image. The full
+corpus is indexed — 9,169 chunks from 37 documents — and retrieval quality is
+measured rather than eyeballed:
 
 ```bash
 python scripts/run_eval.py --save eval/baseline.json
@@ -23,10 +23,10 @@ Current baseline is **recall@5 = 0.50** over 32 labelled questions, with the
 score broken out by how the question is phrased. See `eval/README.md` for what
 the numbers do and do not support.
 
-A single-page frontend at `/` consumes that API. Next: deploy, then 2–3 real
-students. Retrieval improvements are otherwise deferred and written up as
-experiments to run against this baseline rather than done now — one has been run
-so far, described below.
+A single-page frontend at `/` consumes that API, behind a shared password. Next:
+2–3 real students. Retrieval improvements are otherwise deferred and written up as
+experiments to run against this baseline rather than done now — one has been run so
+far, described below.
 
 ### Reference lists do not compete with explanations
 
@@ -137,8 +137,12 @@ makes `eval/baseline.json` mean something. It also caches extracted page text to
 and `scripts/find_passage.py` read that cache instead of paying for it again.
 
 For a change that alters chunking or chunk metadata but not extraction,
-`build_index.py --from-cache` re-chunks that cache instead — 71 seconds rather
-than 14 minutes. It is only valid while `ingest.load_pdf` is unchanged, and the
+`build_index.py --from-cache` re-chunks that cache instead. What that skips is
+extraction; what it still pays is embedding 9,169 chunks, which is most of the
+cost — measured at 21 minutes on 2026-08-17. (The 71 seconds this used to claim
+was measured on a much smaller corpus and never re-checked. A number in the docs
+that nothing re-derives drifts silently, which is the same failure mode as an
+eval baseline nobody re-runs.) It is only valid while `ingest.load_pdf` is unchanged, and the
 guard is downstream rather than in the script: an unchanged setting has to
 reproduce the saved baseline exactly, and a stale cache would not.
 
@@ -188,20 +192,40 @@ passages and `eval/baseline.json` carries no chunk text for the same reason.
 
 ## Running the API
 
-Needs an index already built (the sequence above).
+Needs an index already built (the sequence above), and a password.
 
 ```bash
-uvicorn rag_tutoring.api:app --reload
+RAG_ACCESS_PASSWORD=... uvicorn rag_tutoring.api:app --reload
 ```
 
 ```bash
-curl -s -X POST localhost:8000/ask -H 'Content-Type: application/json' \
+curl -s -u any:$RAG_ACCESS_PASSWORD -X POST localhost:8000/ask \
+  -H 'Content-Type: application/json' \
   -d '{"question":"Why does my training loss go down but validation error go up?","k":3}'
 ```
 
 `GET /health` reports what is actually indexed — model, chunk budget, collection,
 chunk and document counts — because a result set means little without the index
 that produced it. Interactive docs at `/docs`.
+
+### The password is not optional
+
+`/ask` returns verbatim source text and the corpus includes one purchased document, so
+`RAG_ACCESS_PASSWORD` gates both `/ask` and the page at `/`. **Unset, the API refuses to
+start** — it is not a feature that defaults to off.
+
+That is the opposite of how the API key behaves, and the asymmetry is the point: with no
+key, generation is off and passages still serve, which is a working product. With no
+password, the corpus is served to whoever finds the URL. An optional feature may default
+to off only when off is the safe state.
+
+It is HTTP Basic with one shared password and no username (any username is accepted —
+all the entropy is in the password). The browser prompts on navigation to `/` and then
+attaches the same credentials to the page's own `fetch("/ask")`, which is why the
+frontend contains no login form and no token. `/health` is deliberately open, so a
+platform health check can reach it; it reports counts and model names, never document
+text. Accounts, revocation and rate limiting are Phase 4 — see
+`docs/decisions/0002-deploying-the-pilot.md`.
 
 ### Where the index lives
 
@@ -263,6 +287,58 @@ That marker format was measured, not picked. Bare `[N]` appears 1,342 times acro
 11.6% of the corpus's pages — papers cite by number — so validating a bare marker
 would collide with the corpus's own references. `[source N]` appears zero times.
 
+## Deploying
+
+One image holds the API, the embedding weights and the index. The reasoning is in
+`docs/decisions/0002-deploying-the-pilot.md`; the operational shape is:
+
+```bash
+docker build -t rag-tutoring .
+docker run --rm --network none -p 8000:8000 -e RAG_ACCESS_PASSWORD=... rag-tutoring
+```
+
+`--network none` is not paranoia, it is the test. The embedding model is downloaded at
+build time and `HF_HUB_OFFLINE=1` is set at runtime, so a container that can still answer
+with no network is a container that is not quietly fetching 87 MB of weights from the
+Hugging Face Hub the first time a student asks something. Check `/ask` rather than
+`/health` — `/health` answers from state stamped at startup and would look fine over a
+broken index, and Chroma opens `chroma.sqlite3` read-write even for pure reads, so a
+permissions mistake on `/app/chroma` shows up only on a query.
+
+Note what a local build on an Apple Silicon machine does and does not prove. It produces
+a linux/arm64 image; Fly's builder produces linux/amd64, and that is the artifact that
+gets deployed. The Dockerfile is written to be true on both — it asserts
+`torch.version.cuda is None` rather than a `+cpu` version suffix, because that suffix
+only exists on x86_64 and a suffix check would fail a perfectly correct aarch64 build.
+`flyctl deploy` needs no local daemon at all, and `HF_HUB_OFFLINE=1` means a missing
+model is a **boot failure** rather than a silent download, so a healthy `/health` on the
+deployed machine carries most of what `--network none` was standing in for.
+
+**The index is baked in, so re-indexing is a redeploy.** `COPY chroma/ /app/chroma` plus
+`RAG_CHROMA_DIR=/app/chroma`. That gives the image and the index it serves one version
+number, which is what makes `eval/baseline.json` mean anything about what students are
+actually querying. The gate before building is that the eval reproduces the committed
+baseline — after a deploy is too late, because the artifact is already in use.
+
+It also means the deploy has to **upload local files** rather than build from a git
+checkout: `chroma/` is gitignored, so a GitHub-connected build has no index to bake. Both
+`flyctl deploy` and `railway up` upload the working directory and honour
+`.dockerignore`; the git integration is the thing that cannot work here. Fly was chosen
+from there.
+
+```bash
+flyctl secrets set RAG_ACCESS_PASSWORD=...   # required; the app will not start without it
+flyctl secrets set ANTHROPIC_API_KEY=...     # optional; turns generation on
+flyctl deploy
+```
+
+Secrets live only in the platform. Nothing in the repository or the image contains one,
+and nothing in a deployment reads a file — `.env` is a local-development convenience
+only.
+
+**The image is as sensitive as `data/`.** It contains the chunked text of every source
+document, including the purchased one. Private registry only.
+
 ## Development
 
 To explore the pipeline interactively:
@@ -291,6 +367,7 @@ data/raw/            Source tutoring materials (gitignored).
 data/processed/      Extracted page text, cached between runs (gitignored).
 eval/                Eval set: questions with known-correct sources, plus results.
 docs/decisions/      Architecture decision records.
+Dockerfile           The deployable artifact: API + embedding weights + index.
 ```
 
 Directories for later phases exist as placeholders. They stay empty until the

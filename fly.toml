@@ -1,0 +1,62 @@
+# Fly configuration for the pilot. One machine, one image, the index inside it.
+#
+# Deployed with `flyctl deploy`, which uploads this directory (honouring .dockerignore)
+# rather than building from a git checkout -- `chroma/` is gitignored, so a git-triggered
+# build would have no index to bake. See docs/decisions/0002-deploying-the-pilot.md.
+#
+# The build happens on Fly's remote builder, which is x86_64. That is the architecture
+# that matters: a local `docker build` on an Apple Silicon machine produces an arm64
+# image that is never what gets deployed.
+
+app = "rag-tutoring"
+# Los Angeles -- the closest Fly region to San Diego. Latency is not the interesting
+# constraint here (a question costs an embedding pass plus a model call, both far larger
+# than the round trip), but there is no reason to serve southern California from Seattle.
+primary_region = "lax"
+
+[build]
+
+[env]
+  # Where the baked index lives. Also set in the Dockerfile; repeated here because this
+  # file is where someone reading the deployment looks first, and a value that only
+  # exists in an image layer is invisible to them.
+  RAG_CHROMA_DIR = "/app/chroma"
+
+# Secrets -- RAG_ACCESS_PASSWORD (required; the app will not start without it) and
+# ANTHROPIC_API_KEY (optional; turns generation on) -- are set with `flyctl secrets set`
+# and deliberately do not appear here. This file is committed.
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  # Zero, not one. Cold start is a model load and an index open -- roughly ten seconds --
+  # and for a handful of students that is a fine trade for not paying to idle. Revisit if
+  # a first question per session feeling slow turns out to matter more than the cost.
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    # /health is the one unauthenticated route, and this is why: a platform check carries
+    # no credentials, and a check answering 401 reads as a dead machine. It reports counts
+    # and model names, never document text.
+    path = "/health"
+    interval = "30s"
+    timeout = "5s"
+    # Long enough to cover a cold start. A grace period shorter than the model load makes
+    # a healthy machine look like a crash loop.
+    grace_period = "30s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  # Measured, not guessed -- but measured on the machine, because the local proxy was
+  # worthless. `ps` on macOS reported this process at 118 MB and then 9 MB while it sat
+  # idle, which is page compression rather than the app shrinking. On the deployed
+  # machine, after boot and health checks: ~703 MB of 985 MB in use.
+  #
+  # So 512 MB would have been an OOM kill during startup, which presents as "crashed, no
+  # logs" with nothing pointing at memory. Headroom here is real but not generous; recheck
+  # under actual student traffic rather than trimming:
+  #   flyctl ssh console -C "grep -E 'MemTotal|MemAvailable' /proc/meminfo"
+  memory = "1gb"
+  cpus = 1

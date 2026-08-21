@@ -1,7 +1,8 @@
 """Tests for the HTTP surface.
 
-These run with **no index and no embedding model**, the same constraint the rest
-of the suite holds to. Two things make that work, and both are load-bearing:
+These run with **no index, no embedding model and no access secret**, the same
+constraint the rest of the suite holds to. Two things make that work, and both are
+load-bearing:
 
 * the store arrives through a dependency, so a stub can replace it;
 * ``TestClient(app)`` is used bare rather than as a context manager, because
@@ -11,6 +12,12 @@ of the suite holds to. Two things make that work, and both are load-bearing:
 So a test that needs startup state sets it on ``app.state`` explicitly. That is
 also the honest shape of the coverage: dependency-overridden tests never
 exercise the real wiring, which has to be checked by starting the server.
+
+The ``client`` fixture overrides the auth gate, which buys every test above the
+gate-specific ones the ability to ignore it -- and means those tests prove nothing
+about it. So the gate has its own client that overrides nothing, and its tests set the
+secret themselves. A gate tested only through a client that disables it is the shape of
+a test that cannot fail.
 """
 
 from __future__ import annotations
@@ -22,16 +29,19 @@ from dataclasses import dataclass
 import pytest
 from fastapi.testclient import TestClient
 
-from rag_tutoring import generate
+from rag_tutoring import api, generate
 from rag_tutoring.api import (
+    ACCESS_PASSWORD_ENV,
     INDEX_HTML,
     MAX_K,
     AnswerOut,
     AskResponse,
     IndexInfo,
+    access_secret,
     app,
     get_generator,
     get_store,
+    require_access,
 )
 from rag_tutoring.generate import Answer, TruncatedAnswer, UngroundedCitation
 
@@ -88,15 +98,42 @@ class FakeStore:
 
 @pytest.fixture
 def store():
+    """Removes only its own override, so it cannot undo another fixture's setup.
+
+    This used to clear the whole dict, which was harmless while the store was the only
+    thing overridden and is not now: the ``client`` fixture installs the auth override,
+    and a teardown that wiped it would leave the gate live for whatever ran next.
+    """
     fake = FakeStore()
     app.dependency_overrides[get_store] = lambda: fake
     yield fake
-    app.dependency_overrides.clear()
+    app.dependency_overrides.pop(get_store, None)
 
 
 @pytest.fixture
 def client():
-    return TestClient(app)
+    """A client that is past the auth gate, so a test can be about something else.
+
+    Overriding the dependency rather than sending credentials keeps the suite's defining
+    property intact -- it runs with no secret configured at all, the same way it runs
+    with no key and no index. The cost is stated in the module docstring: nothing
+    reached through this client says anything about the gate.
+    """
+    app.dependency_overrides[require_access] = lambda: None
+    yield TestClient(app)
+    app.dependency_overrides.pop(require_access, None)
+
+
+@pytest.fixture
+def gated_client(monkeypatch):
+    """A client with the gate live and a known secret. Overrides nothing.
+
+    Yields the password so a test cannot assert against a copy that has drifted from
+    what was configured.
+    """
+    password = "correct-horse-battery-staple"
+    monkeypatch.setenv(ACCESS_PASSWORD_ENV, password)
+    return TestClient(app), password
 
 
 @pytest.fixture
@@ -123,6 +160,114 @@ def stamped_index_info():
         del app.state.index_info
     else:
         app.state.index_info = previous
+
+
+def test_no_credentials_are_rejected_and_the_browser_is_told_to_prompt(gated_client, store):
+    """The gate's reason for existing: ``/ask`` returns verbatim source text.
+
+    The header assertion is not decoration. A 401 without ``WWW-Authenticate`` is a
+    browser that never shows a sign-in box, so the page just appears broken -- a failure
+    that happens only in front of a person, where no test is watching.
+    """
+    client, _ = gated_client
+    response = client.post("/ask", json={"question": "what is dropout?"})
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"].startswith("Basic")
+    assert store.calls == [], "an unauthenticated request must not reach the corpus"
+
+
+def test_a_wrong_password_is_rejected_and_still_prompts(gated_client, store):
+    """The 401 the route raises itself, rather than the one ``HTTPBasic`` raises.
+
+    ``HTTPBasic`` attaches ``WWW-Authenticate`` when the header is *missing*. On a wrong
+    password that code path never runs, so this response's header is one the route has
+    to remember to send -- which is exactly the kind of thing that gets dropped in a
+    refactor and noticed by a student.
+    """
+    client, _ = gated_client
+    response = client.post("/ask", json={"question": "what is dropout?"}, auth=("student", "wrong"))
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"].startswith("Basic")
+    assert store.calls == []
+
+
+def test_the_right_password_gets_through_to_the_passages(gated_client, store):
+    """The other half: a gate that rejected everything would pass every test above."""
+    client, password = gated_client
+    response = client.post(
+        "/ask", json={"question": "what is dropout?"}, auth=("student", password)
+    )
+    assert response.status_code == 200
+    assert len(response.json()["citations"]) == 5
+    assert store.calls == [("what is dropout?", 5)]
+
+
+def test_the_username_is_not_a_second_secret(gated_client, store):
+    """Documents a decision rather than discovering it later.
+
+    Basic auth has a username field because it was built for accounts. There are none
+    here, and all the entropy is in the one password, so demanding a particular username
+    would add a second thing to distribute and mistype for no security. Left as a quiet
+    side effect it looks like an oversight; asserted, it is a choice.
+    """
+    client, password = gated_client
+    for username in ("student", "trevor", ""):
+        response = client.post(
+            "/ask", json={"question": "what is dropout?"}, auth=(username, password)
+        )
+        assert response.status_code == 200, f"username {username!r} should not matter"
+
+
+def test_the_page_itself_is_gated(gated_client):
+    """Gating ``/`` is what lets the page hold no auth code: the browser prompts on the
+    navigation and then attaches the same credentials to its own ``fetch("/ask")``."""
+    client, password = gated_client
+    assert client.get("/").status_code == 401
+    assert client.get("/", auth=("student", password)).status_code == 200
+
+
+def test_health_stays_reachable_without_credentials(gated_client, stamped_index_info):
+    """The one deliberate exemption. A platform's health check has no credentials, and a
+    check answering 401 reads as a dead machine. What it discloses is counts and model
+    names -- provenance about the index, not a line of any document in it."""
+    client, _ = gated_client
+    app.state.index_info = stamped_index_info
+    assert client.get("/health").status_code == 200
+
+
+def test_a_missing_secret_is_a_hard_failure_rather_than_an_open_door(monkeypatch):
+    """The asymmetry with generation, pinned.
+
+    ``generator_from_env()`` returns ``None`` with no key and that is correct, because
+    off means serving passages alone. Off here would mean a reachable URL serving the
+    corpus, so there is no such state -- and the message has to name the variable,
+    because it is the only instruction a person reading container logs gets.
+    """
+    monkeypatch.delenv(ACCESS_PASSWORD_ENV, raising=False)
+    with pytest.raises(RuntimeError, match=ACCESS_PASSWORD_ENV):
+        access_secret()
+
+
+def test_the_api_refuses_to_start_without_a_secret(monkeypatch):
+    """Boot fails, rather than a running server that happens to reject every request.
+
+    ``VectorStore`` is replaced with something that raises, so this also pins the
+    *order*: the check runs before the model is loaded and the index opened. A
+    misconfigured deployment then fails in a second, and this test needs no index.
+
+    ``local_env_file`` is stubbed out because the developer's own ``.env`` will hold a
+    password once they configure one, and this test has to be about the guard rather
+    than about a gitignored file that may or may not exist.
+    """
+    monkeypatch.setattr(api, "local_env_file", lambda: None)
+    monkeypatch.delenv(ACCESS_PASSWORD_ENV, raising=False)
+
+    def unreachable(*args, **kwargs):
+        raise AssertionError("the secret must be checked before the index is opened")
+
+    monkeypatch.setattr(api, "VectorStore", unreachable)
+    with pytest.raises(RuntimeError, match=ACCESS_PASSWORD_ENV), TestClient(app):
+        pass
 
 
 def test_ask_returns_citations_best_first(client, store):
@@ -357,6 +502,44 @@ def test_the_page_reads_the_answer_fields_the_response_actually_carries():
     assert "data.answer" in script, "the page no longer reads the answer off the response"
     for field in ("answer.text", "answer.model"):
         assert field in script, f"the page no longer renders {field}"
+
+
+def test_the_page_handles_the_status_code_the_gate_actually_returns():
+    """One more contract spanning the two halves, pinned the same way as the others.
+
+    401 is the one failure with a fix a student can carry out, and the generic message
+    would send them to rephrase a question that was never the problem. If the gate's
+    status code and the page's branch ever disagree, nothing here fails and nothing in a
+    browser errors -- a student just gets told to try different words forever.
+    """
+    script = _script_of(INDEX_HTML.read_text())
+    assert "response.status === 401" in script, "the page no longer handles a rejected session"
+    assert "Reload" in script, (
+        "the recovery instruction is the point: a 401 from fetch does not raise the "
+        "browser's sign-in prompt, only a navigation does"
+    )
+
+
+def test_the_page_does_not_opt_out_of_sending_credentials():
+    """The frontend half of the reason there is no login form.
+
+    The browser collects the password on the navigation to ``/`` and then attaches it to
+    the page's own ``fetch("/ask")`` -- same origin, same realm. That only holds while the
+    request keeps the default credentials mode. ``credentials: "omit"`` is exactly the
+    kind of thing a later pass adds while tidying, and it would strip the header from
+    every request: each question then 401s, the page tells the student to reload, the
+    reload succeeds because a *navigation* still carries credentials, and the next
+    question 401s again. An infinite loop, with all of these tests green.
+
+    Whether the browser really does attach them cannot be checked from Python at all, so
+    what is pinned here is the half that can be: the page does not opt out.
+    """
+    script = _script_of(INDEX_HTML.read_text())
+    match = re.search(r"credentials\s*:\s*[\"'](\w+)[\"']", script)
+    assert match is None or match.group(1) in {"same-origin", "include"}, (
+        f'the page sets credentials: "{match.group(1) if match else ""}", which stops the '
+        "browser attaching the password it already collected"
+    )
 
 
 def test_the_page_does_not_parse_model_output_as_markup():

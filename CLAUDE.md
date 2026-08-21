@@ -29,4 +29,7 @@ or an embedding API (undecided), Next.js or minimal HTML/JS for frontend.
   over gold-plating.
 
 ## Current phase
-Phase 1 — ingestion + basic retrieval, notebook-level.
+Phase 3 — frontend + deploy. Ingestion, retrieval, the API, the eval set and the 
+single-page frontend are done. Deployed to Fly.io behind a shared password, with 
+the index baked into the image. Remaining in this phase: 2–3 real students. Then 
+Phase 4 infra, starting with caching.

@@ -19,6 +19,13 @@ model was not given, and an answer cut off by the output budget. Neither is repa
 see ``generate.UngroundedCitation`` and ``generate.TruncatedAnswer`` for why. Both leave
 ``answer`` null, which is a state the page already renders.
 
+**Everything that serves corpus text is behind a shared secret.** ``/ask`` returns
+verbatim passages and the corpus includes one purchased document, so a reachable URL is
+the actual exposure -- which is why the gate exists before there is anywhere to deploy
+to rather than after. It is a password, not a user system: accounts, sessions and rate
+limiting are Phase 4. Unlike generation, it has no off switch, because *off* is the safe
+default for generation and the unsafe one here.
+
 Run it with::
 
     uvicorn rag_tutoring.api:app --reload
@@ -29,14 +36,17 @@ That serves the JSON API and, at ``/``, the one static page that consumes it.
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 from pathlib import Path
+from secrets import compare_digest
 from typing import Annotated
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.responses import FileResponse
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel, Field
 
 from rag_tutoring.citations import cite
@@ -63,6 +73,71 @@ MAX_K = 20
 # the package as data -- declared in ``pyproject.toml`` under ``package-data``, where
 # the comment explains what that declaration does and does not buy.
 INDEX_HTML = Path(__file__).parent / "static" / "index.html"
+
+# The environment variable holding the shared access secret. Named rather than inlined
+# for the same reason as ``config.CHROMA_DIR_ENV``: the failure quotes it, and that
+# message is the only instruction a person reading container logs gets. The *name*
+# appears in errors and logs; the value never does.
+ACCESS_PASSWORD_ENV = "RAG_ACCESS_PASSWORD"
+
+# Titles the browser's own sign-in prompt, so a student sees what they are signing in to
+# rather than a bare hostname.
+ACCESS_REALM = "RAG Tutoring"
+
+_basic = HTTPBasic(realm=ACCESS_REALM)
+
+
+def access_secret() -> str:
+    """The shared secret. Raises rather than returning ``None`` or an empty string.
+
+    Read from ``os.environ`` on every call rather than captured at import -- the same
+    property ``config.chroma_dir()`` has, for the same two reasons: a value frozen at
+    import cannot be set by a deployment afterwards, and cannot be set by a test at all.
+
+    The asymmetry with generation is the part worth being able to say out loud.
+    ``generator_from_env`` returns ``None`` when no key is configured, and that is right
+    because *off* there means serving passages alone -- a working product. Off here means
+    a reachable URL serving verbatim source text from a purchased document. So a missing
+    secret is not a mode this runs in: ``lifespan`` refuses to start without one, and
+    this refuses to answer. A misconfiguration that cannot be reached by forgetting, only
+    by deciding.
+    """
+    secret = os.environ.get(ACCESS_PASSWORD_ENV)
+    if not secret:
+        raise RuntimeError(
+            f"no access secret: {ACCESS_PASSWORD_ENV} is not set, and this API serves "
+            f"verbatim source text, so it does not run without one. Set "
+            f"{ACCESS_PASSWORD_ENV} to the password students are given."
+        )
+    return secret
+
+
+def require_access(credentials: Annotated[HTTPBasicCredentials, Depends(_basic)]) -> None:
+    """Gate the routes that serve corpus text. A shared password, not a user system.
+
+    **Only the password is checked.** HTTP Basic has a username field because it was
+    designed for accounts, and there are none here -- all the entropy is in the one
+    secret, so demanding a particular username would add a second thing to distribute
+    and mistype without adding a bit of security. Asserted by a test rather than left as
+    a quiet side effect, so it reads as a decision.
+
+    ``compare_digest`` rather than ``==`` so a wrong password takes the same time
+    whatever prefix it shares with the right one. Encoded to bytes because
+    ``compare_digest`` rejects non-ASCII ``str``, and a password is exactly the kind of
+    input that arrives with an accent in it.
+
+    The ``WWW-Authenticate`` header is what makes a browser *prompt* instead of the page
+    appearing broken. ``HTTPBasic`` sends it when the header is missing; a **wrong**
+    password is this function's own 401 and has to send it again. Omitting it fails
+    nowhere except in front of a person, which is why there is a test on the header and
+    not only on the status code.
+    """
+    if not compare_digest(credentials.password.encode(), access_secret().encode()):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": f'Basic realm="{ACCESS_REALM}"'},
+        )
 
 
 class AskRequest(BaseModel):
@@ -166,6 +241,13 @@ async def lifespan(app: FastAPI):
     if (env_path := local_env_file()) is not None:
         load_dotenv(env_path)
 
+    # Fail closed, and fail *first* -- before the model is loaded and the index opened.
+    # After the file above, or a local run could never satisfy it; before the store, so a
+    # misconfigured deployment crashes in a second rather than thirty, and so the test
+    # covering this needs no index and no model. A process that reaches the line below
+    # has a secret.
+    access_secret()
+
     store = VectorStore()
     generator = generator_from_env()
     app.state.store = store
@@ -223,7 +305,7 @@ StoreDep = Annotated[VectorStore, Depends(get_store)]
 GeneratorDep = Annotated["Generator | None", Depends(get_generator)]
 
 
-@app.post("/ask", response_model=AskResponse)
+@app.post("/ask", response_model=AskResponse, dependencies=[Depends(require_access)])
 def ask(payload: AskRequest, store: StoreDep, generator: GeneratorDep) -> AskResponse:
     """Answer ``question`` from the passages most relevant to it, best first.
 
@@ -260,11 +342,18 @@ def health(request: Request) -> IndexInfo:
 
     Deliberately reads the values stamped at startup instead of re-querying, so
     a load balancer polling this endpoint cannot make it expensive.
+
+    **The one route deliberately left open**, and for a reason that is not convenience:
+    a platform's health check has no credentials, and a check that returns 401 reads as
+    a dead machine. What it discloses is counts, model names and a collection name --
+    provenance about the index, not a line of any document in it. ``/docs`` and
+    ``/openapi.json`` are open on the same argument: they describe the shape of a
+    request, and the request they describe is still gated.
     """
     return request.app.state.index_info
 
 
-@app.get("/", include_in_schema=False)
+@app.get("/", include_in_schema=False, dependencies=[Depends(require_access)])
 def index() -> FileResponse:
     """Serve the one page that consumes this API.
 
@@ -275,5 +364,11 @@ def index() -> FileResponse:
 
     Kept out of the OpenAPI schema -- it is the UI, not an operation a client
     calls.
+
+    Gated, and that is what lets the page hold no authentication code at all. The browser
+    prompts here, then attaches the same credentials to the page's own ``fetch("/ask")``
+    because it is the same origin and the same realm. A token would have had to live in
+    JavaScript, be pasted into a form, or be handed out in a URL -- three ways to leak a
+    shared secret, in exchange for a login box nobody needs at this size.
     """
     return FileResponse(INDEX_HTML)
